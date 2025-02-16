@@ -11,9 +11,9 @@ from .cache import Entity, Issue, PullRequest, entity_cache
 from app.components.entity_mentions.models import Discussion
 from app.components.entity_mentions.resolution import resolve_repo_signatures
 from app.setup import bot, config
-from app.utils import dynamic_timestamp, get_ghostty_guild
+from app.utils import dynamic_timestamp, escape_special, get_ghostty_guild
 
-ENTITY_TEMPLATE = "**{kind} [#{entity.number}](<{entity.html_url}>):** {entity.title}"
+ENTITY_TEMPLATE = "**{kind} [#{entity.number}](<{entity.html_url}>):** {title}"
 EMOJI_NAMES = frozenset(
     {
         "discussion_answered",
@@ -47,7 +47,8 @@ async def load_emojis() -> None:
 
 def _format_mention(entity: Entity) -> str:
     entity_kind = PASCAL_CASE_WORD_BOUNDARY.sub(r"\1 \2", type(entity).__name__)
-    headline = ENTITY_TEMPLATE.format(kind=entity_kind, entity=entity)
+    title = escape_special(entity.title)
+    headline = ENTITY_TEMPLATE.format(kind=entity_kind, entity=entity, title=title)
 
     # https://github.com/owner/repo/issues/12
     # -> https://github.com  owner  repo  issues  12
