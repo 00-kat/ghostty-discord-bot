@@ -118,7 +118,14 @@ async def move_message_via_webhook(
 
     msg = await webhook.send(
         content=content,
-        poll=message.poll or discord.utils.MISSING,
+        poll=(
+            message.poll
+            # Discord does not like negative poll durations. Polls created by
+            # a Webhook cannot be ended manually, so simply discard polls which
+            # have ended.
+            if message.poll is not None and message.poll.duration.total_seconds() > 0
+            else discord.utils.MISSING
+        ),
         username=message.author.display_name,
         avatar_url=message.author.display_avatar.url,
         allowed_mentions=discord.AllowedMentions.none(),
