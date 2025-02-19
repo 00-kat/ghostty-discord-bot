@@ -131,5 +131,5 @@ def escape_special(content: str) -> str:
     escaped = _INVITE_LINK_REGEX.sub(r"<https://\1>", escaped)
     # escape_markdown() doesn't deal with ordered lists.
     return "\n".join(
-        _ORDERED_LIST_REGEX.sub(r"\1\. \2", l) for l in escaped.splitlines()
+        _ORDERED_LIST_REGEX.sub(r"\1\. \2", line) for line in escaped.splitlines()
     )
