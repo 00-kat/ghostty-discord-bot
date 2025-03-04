@@ -198,7 +198,7 @@ async def _format_context_menu_command(reply: discord.Message) -> discord.Embed:
 
 
 async def _format_forward(
-    forward: discord.Message,
+    forward: discord.Message, message_map: dict[int, str] | None = None
 ) -> tuple[list[discord.Embed], list[discord.File]]:
     if forward is discord.utils.MISSING:
         return [_unattachable_embed("forward")], []
@@ -208,8 +208,14 @@ async def _format_forward(
         *forward.embeds,
         *await asyncio.gather(*map(_get_sticker_embed, forward.stickers)),
     ]
+
+    link = (
+        forward.jump_url
+        if message_map is None
+        else message_map.get(forward.id, forward.jump_url)
+    )
     embed = discord.Embed(
-        description=forward.content, timestamp=forward.created_at, url=forward.jump_url
+        description=forward.content, timestamp=forward.created_at, url=link
     ).set_author(name="➜ Forwarded")
 
     if hasattr(forward.channel, "name"):
@@ -251,9 +257,7 @@ async def _format_forward(
         include_timestamp=False,
     ).splitlines():
         embed.add_field(name="", value=line, inline=False)
-    embed.add_field(
-        name="", value=f"-# [**Jump**](<{forward.jump_url}>) 📎", inline=False
-    )
+    embed.add_field(name="", value=f"-# [**Jump**](<{link}>) 📎", inline=False)
 
     embeds.insert(0, embed)
     return embeds, msg_data.attachments
