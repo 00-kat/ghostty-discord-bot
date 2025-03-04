@@ -162,7 +162,7 @@ async def _format_context_menu_command(reply: discord.Message) -> discord.Embed:
 
 
 async def _format_forward(
-    forward: discord.MessageSnapshot,
+    forward: discord.MessageSnapshot, message_map: dict[int, str] | None = None
 ) -> tuple[list[discord.Embed], list[discord.File]]:
     content = _convert_nitro_emojis(forward.content)
     if len(content) > 4096:
@@ -173,6 +173,7 @@ async def _format_forward(
         *(e for e in forward.embeds if not e.url),
         *await asyncio.gather(*map(_get_sticker_embed, forward.stickers)),
     ]
+
     embed = discord.Embed(description=content, timestamp=forward.created_at)
     embed.set_author(name="➜ Forwarded")
 
@@ -204,13 +205,16 @@ async def _format_forward(
         embed.add_field(name="", value=f"-# {skipped}", inline=False)
 
     if (message := forward.cached_message) is not None:
+        link = (
+            message.jump_url
+            if message_map is None
+            else message_map.get(message.id, message.jump_url)
+        )
         if not isinstance(
             message.channel, discord.DMChannel | discord.PartialMessageable
         ):
             embed.set_footer(text=f"#{message.channel.name}")
-        embed.add_field(
-            name="", value=f"-# [**Jump**](<{message.jump_url}>) 📎", inline=False
-        )
+        embed.add_field(name="", value=f"-# [**Jump**](<{link}>) 📎", inline=False)
 
     embeds.insert(0, embed)
     return embeds, files
