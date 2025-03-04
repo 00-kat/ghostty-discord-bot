@@ -159,7 +159,9 @@ def truncate(s: str, length: int, *, suffix: str = "…") -> str:
     return s[: length - len(suffix)] + suffix
 
 
-async def _format_reply(reply: discord.Message) -> discord.Embed:
+async def _format_reply(
+    reply: discord.Message, message_map: dict[int, str] | None = None
+) -> discord.Embed:
     if reply is discord.utils.MISSING:
         return _unattachable_embed("reply")
     description_prefix = ""
@@ -182,13 +184,18 @@ async def _format_reply(reply: discord.Message) -> discord.Embed:
                 description = f"> {ref.content}"
             else:
                 description = "> *Some forwarded content elided.*"
+    link = (
+        reply.jump_url
+        if message_map is None
+        else message_map.get(reply.id, reply.jump_url)
+    )
     return (
         discord.Embed(description=f"{description_prefix}{truncate(description, 100)}")
         .set_author(
             name=f"↪️ Replying to {reply.author.display_name}",  # test: allow-vs16
             icon_url=reply.author.display_avatar,
         )
-        .add_field(name="", value=f"-# [**Jump**](<{reply.jump_url}>) 📎")
+        .add_field(name="", value=f"-# [**Jump**](<{link}>) 📎")
     )
 
 
