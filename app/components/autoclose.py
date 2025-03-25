@@ -15,16 +15,24 @@ async def autoclose_solved_posts() -> None:
     closed_posts: list[discord.Thread] = []
     failures: list[discord.Thread] = []
 
+    one_day_ago = dt.datetime.now(tz=dt.UTC) - dt.timedelta(hours=24)
+    three_days_ago = dt.datetime.now(tz=dt.UTC) - dt.timedelta(hours=24 * 3)
+
     help_channel = cast(discord.ForumChannel, bot.get_channel(config.HELP_CHANNEL_ID))
     open_posts = len(help_channel.threads)
     for post in help_channel.threads:
-        if post.archived or not post_is_solved(post):
-            continue
         if post.last_message_id is None:
             failures.append(post)
             continue
-        one_day_ago = dt.datetime.now(tz=dt.UTC) - dt.timedelta(hours=24)
-        if discord.utils.snowflake_time(post.last_message_id) < one_day_ago:
+        post_time = discord.utils.snowflake_time(post.last_message_id)
+        if post.archived or not post_is_solved(post):
+            if post_time < three_days_ago:
+                await post.add_tags(
+                    discord.ForumTag(name="stale"),
+                    reason="Post inactive for over three days.",
+                )
+            continue
+        if post_time < one_day_ago:
             await post.edit(archived=True)
             closed_posts.append(post)
 
