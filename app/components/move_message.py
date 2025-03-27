@@ -200,3 +200,30 @@ async def turn_into_help_post(
         return
 
     await interaction.response.send_modal(HelpPostTitle(message))
+
+
+@bot.tree.context_menu(name="Delete moved message")
+@discord.app_commands.guild_only()
+async def delete_moved_message(
+    interaction: discord.Interaction, message: discord.Message
+) -> None:
+    assert not is_dm(interaction.user)
+
+    if message.webhook_id is None:
+        await interaction.response.send_message(
+            "This message is not a moved message.", ephemeral=True
+        )
+        return
+
+    # TODO(Kat): allow for OP.
+    if True and not (
+        isinstance(message.author, discord.Member)
+        and message.channel.permissions_for(message.author).manage_messages
+    ):
+        await interaction.response.send_message(
+            "You do not have the required permissions to delete messages.",
+            ephemeral=True,
+        )
+        return
+
+    await message.delete()
