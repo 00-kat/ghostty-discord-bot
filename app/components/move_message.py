@@ -140,6 +140,30 @@ class DeleteOriginalMessage(discord.ui.View):
         )
 
 
+class MessageEditBox(discord.ui.Modal, title="Edit Message"):
+    new_text: discord.ui.TextInput[HelpPostTitle] = discord.ui.TextInput(
+        label="New message content",
+        style=discord.TextStyle.paragraph,
+        default=discord.utils.MISSING,
+        max_length=2000,
+    )
+
+    def __init__(self, message: discord.WebhookMessage) -> None:
+        # TODO(Kat): allow removing attachments or embeds.
+        #   - https://discordpy.readthedocs.io/en/stable/api.html#discord.WebhookMessage.remove_attachments
+        #   - discord.WebhookMessage.edit() lets you do this too.
+        # TODO(Kat): discord.WebhookMessage.add_files().
+        self.new_text.default = message.content
+        super().__init__()
+        self._message = message
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await self._message.edit(
+            content=self.new_text.value, allowed_mentions=discord.AllowedMentions.none()
+        )
+        await interaction.followup.send("Message edited.", ephemeral=True)
+
+
 @bot.tree.context_menu(name="Move message")
 @discord.app_commands.default_permissions(manage_messages=True)
 @discord.app_commands.guild_only()
@@ -200,3 +224,33 @@ async def turn_into_help_post(
         return
 
     await interaction.response.send_modal(HelpPostTitle(message))
+
+
+@bot.tree.context_menu(name="Edit moved message")
+@discord.app_commands.guild_only()
+async def edit_moved_message(
+    interaction: discord.Interaction, message: discord.Message
+) -> None:
+    assert not is_dm(interaction.user)
+
+    if not message.author.bot:  # TODO(Kat): better webhook check.
+        await interaction.response.send_message(
+            "This message is not a moved message.", ephemeral=True
+        )
+        return
+
+    if False:  # TODO(Kat): disallow for everyone except OP.
+        await interaction.response.send_message(
+            "You can only edit messages you authored.", ephemeral=True
+        )
+        return
+
+    webhook = await get_or_create_webhook("Ghostty Moderator", message.channel)
+    try:
+        webhook_message = await webhook.fetch_message(message.id)
+    except (discord.NotFound, discord.Forbidden):
+        await interaction.response.send_message(
+            "This message cannot be edited.", ephemeral=True
+        )
+    else:
+        await interaction.response.send_modal(MessageEditBox(webhook_message))
