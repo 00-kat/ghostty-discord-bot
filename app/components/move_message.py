@@ -242,14 +242,46 @@ async def delete_moved_message(
 
     if not (
         # TODO(Kat): check perms instead of roles?
-        is_mod(message.author)
-        or is_helper(message.author)
-        or False  # TODO(Kat): disallow for everyone except OP.
+        # is_mod(message.author)
+        # or is_helper(message.author)
+        True  # TODO(Kat): disallow for everyone except OP.
     ):
         await interaction.response.send_message(
-            "You do not have the required permissions to delete messages.",
+            "You did not author this message, or you do not have the required "
+            "permissions to delete messages.",
             ephemeral=True,
         )
         return
 
     await message.delete()
+    await interaction.response.send_message("Message deleted.", ephemeral=True)
+
+
+@bot.tree.context_menu(name="Edit moved message")
+@discord.app_commands.guild_only()
+async def edit_moved_message(
+    interaction: discord.Interaction, message: discord.Message
+) -> None:
+    assert not is_dm(interaction.user)
+
+    if not message.author.bot:  # TODO(Kat): better webhook check.
+        await interaction.response.send_message(
+            "This message is not a moved message.", ephemeral=True
+        )
+        return
+
+    if False:  # TODO(Kat): disallow for everyone except OP.
+        await interaction.response.send_message(
+            "You can only edit messages you authored.", ephemeral=True
+        )
+        return
+
+    webhook = await get_or_create_webhook("Ghostty Moderator", message.channel)
+    try:
+        webhook_message = await webhook.fetch_message(message.id)
+    except (discord.NotFound, discord.Forbidden):
+        await interaction.response.send_message(
+            "This message cannot be edited.", ephemeral=True
+        )
+    else:
+        await interaction.response.send_modal(MessageEditBox(webhook_message))
