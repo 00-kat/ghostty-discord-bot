@@ -250,6 +250,11 @@ Similar to the above feature, entity mentions with a prefix of `xkcd`, such as
 Message edits and deletion are also handled, and a “🗑️ Delete” button is
 provided for one hour.
 
+Alongside the delete button, a “📜 Show Transcript” button is provided to read
+the transcript of any XKCD comic that is attached to a message, if one is
+available. The user is given a select box to pick the XKCD comic(s) they want to
+see the transcript of if multiple are present.
+
 <img src="https://github.com/user-attachments/assets/ff1cf1c8-2927-4156-87af-aa5671252ee7" alt="XKCD mentions example" width=75%">
 
 ## Message filters
