@@ -17,6 +17,7 @@ from app.utils import (
     remove_view_after_timeout,
 )
 
+SECONDS_IN_HOUR = 3600
 XKCD_REGEX = re.compile(r"\bxkcd#(\d+)", re.IGNORECASE)
 XKCD_URL = "https://xkcd.com/{}"
 
@@ -96,7 +97,7 @@ async def handle_xkcd_mentions(message: discord.Message) -> None:
     except discord.HTTPException:
         return
     xkcd_mention_linker.link(message, sent_message)
-    await remove_view_after_timeout(sent_message)
+    await remove_view_after_timeout(sent_message, SECONDS_IN_HOUR)
 
 
 xkcd_mention_delete_hook = create_delete_hook(linker=xkcd_mention_linker)
@@ -106,5 +107,6 @@ xkcd_mention_edit_hook = create_edit_hook(
     message_processor=xkcd_mention_message,
     interactor=handle_xkcd_mentions,
     view_type=DeleteButton,
+    view_timeout=SECONDS_IN_HOUR,
     embed_mode=True,
 )
