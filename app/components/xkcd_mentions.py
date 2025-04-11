@@ -1,6 +1,7 @@
 import asyncio
 import datetime as dt
 import re
+from contextlib import suppress
 
 import discord
 import httpx
@@ -15,6 +16,9 @@ from app.utils import (
     remove_view_after_timeout,
 )
 
+type Transcripts = dict[int, tuple[str, str | None]]
+
+
 SECONDS_IN_HOUR = 3600
 XKCD_REGEX = re.compile(r"\bxkcd#(\d+)", re.IGNORECASE)
 XKCD_URL = "https://xkcd.com/{}"
@@ -26,10 +30,11 @@ class XKCD(BaseModel):
     year: int
     img: str
     title: str
+    transcript: str
     alt: str
 
 
-class XKCDMentionCache(TTRCache[int, discord.Embed]):
+class XKCDMentionCache(TTRCache[int, tuple[discord.Embed, str | None]]):
     async def fetch(self, key: int) -> None:
         url = XKCD_URL.format(key)
         async with httpx.AsyncClient() as client:
@@ -40,7 +45,8 @@ class XKCDMentionCache(TTRCache[int, discord.Embed]):
                 if resp.status_code == 404
                 else f"Unable to fetch XKCD #{key}."
             )
-            self[key] = discord.Embed(color=discord.Color.red()).set_footer(text=error)
+            embed = discord.Embed(color=discord.Color.red()).set_footer(text=error)
+            self[key] = (embed, None)
             return
 
         xkcd = XKCD(**resp.json())
@@ -50,7 +56,8 @@ class XKCDMentionCache(TTRCache[int, discord.Embed]):
         self[key] = (
             discord.Embed(title=xkcd.title, url=url)
             .set_image(url=xkcd.img)
-            .set_footer(text=f"{xkcd.alt} • {date:%B %-d, %Y}")
+            .set_footer(text=f"{xkcd.alt} • {date:%B %-d, %Y}"),
+            xkcd.transcript,
         )
 
 
@@ -58,10 +65,116 @@ xkcd_mention_cache = XKCDMentionCache(hours=12)
 xkcd_mention_linker = MessageLinker()
 
 
-class DeleteButton(DeleteMessage):
+def format_transcript(
+    comic: int | str, name: str, transcript: str | None
+) -> discord.Embed:
+    embed = discord.Embed(
+        title=name,
+        url=XKCD_URL.format(comic),
+        description=transcript or "This comic has no transcript.",
+    )
+    if not transcript:
+        embed.color = discord.Color.red()
+    if len(embed) > 6000:
+        embed.color = discord.Color.red()
+        embed.description = "This comic's transcript is too long to send."
+    return embed
+
+
+class TranscriptPicker(discord.ui.View):
+    select: discord.ui.Select[TranscriptPicker]
+
+    def __init__(self, transcripts: Transcripts) -> None:
+        super().__init__()
+        self.transcripts = transcripts
+        self._add_selection_box()
+
+    def _add_selection_box(self) -> None:
+        self.select = discord.ui.Select(
+            placeholder="Select XKCD comics", max_values=len(self.transcripts)
+        )
+        for number, (name, _) in self.transcripts.items():
+            self.select.add_option(label=name, value=str(number))
+        self.select.callback = self._callback
+        self.add_item(self.select)
+
+    async def _callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.edit_message(
+            embeds=[
+                format_transcript(comic, *self.transcripts[int(comic)])
+                for comic in self.select.values
+            ],
+            view=None,
+        )
+
+
+class XKCDMentionActions(DeleteMessage):
     linker = xkcd_mention_linker
     action_singular = "linked this XKCD comic"
     action_plural = "linked these XKCD comics"
+
+    async def _get_transcripts(
+        self, embeds: list[discord.Embed]
+    ) -> tuple[Transcripts, int]:
+        transcripts: Transcripts = {}
+        failed = 0
+        for embed in embeds:
+            if not (embed.url and embed.title):
+                continue
+            number = int(embed.url.rstrip("/").rpartition("/")[2])
+            _, transcript = await xkcd_mention_cache.get(number)
+            if transcript is None:
+                continue
+            if not transcript:
+                failed += 1
+                transcript = None
+            transcripts[number] = (embed.title, transcript)
+        return transcripts, failed
+
+    @discord.ui.button(
+        label="Show Transcript", emoji="📜", style=discord.ButtonStyle.gray
+    )
+    async def show_transcript(
+        self,
+        interaction: discord.Interaction,
+        _button: discord.ui.Button[XKCDMentionActions],
+    ) -> None:
+        reply, *_ = self.linker.get(self.message)
+        with suppress(discord.NotFound, discord.Forbidden, discord.HTTPException):
+            # TODO(Kat): this is just a temporary workaround to correctly
+            # handle edited XKCD mention messages. There seems to be a bug
+            # somewhere, possibly in the edit hook; my assumption is that it
+            # doesn't update the linked message after the edit, leading to
+            # stale embeds being served. Thus, fetch the real message from
+            # Discord's servers before proceeding. If anything fails, ignore it
+            # and just go with whatever we have in the cache. To reiterate,
+            # this is just a TEMPORARY measure until somebody fixes the actual
+            # issue that causes the returned messages to be stale.
+            reply = await reply.channel.fetch_message(reply.id)
+        transcripts, failed = await self._get_transcripts(reply.embeds)
+        match len(transcripts) - failed:
+            case 0:
+                # None of the XKCD comics have a transcript available.
+                await interaction.response.send_message(
+                    "There are no transcripts available.", ephemeral=True
+                )
+            case 1:
+                # Exactly one XKCD comic has a transcript available.
+                # NOTE: this does not mean that there is only one comic, which
+                # is why a list comprehension is still needed. When there is no
+                # transcript, the embed simply contains an error message.
+                await interaction.response.send_message(
+                    embeds=[
+                        format_transcript(comic, name, transcript)
+                        for comic, (name, transcript) in transcripts.items()
+                    ],
+                    ephemeral=True,
+                )
+            case _:
+                await interaction.response.send_message(
+                    view=TranscriptPicker(transcripts),
+                    ephemeral=True,
+                )
 
 
 async def xkcd_mention_message(
@@ -76,7 +189,8 @@ async def xkcd_mention_message(
         )
         # Nine instead of ten to account for the `omitted` embed.
         matches = matches[:9]
-    embeds = await asyncio.gather(*(xkcd_mention_cache.get(int(m)) for m in matches))
+    tasks = (xkcd_mention_cache.get(int(m)) for m in matches)
+    embeds = [embed for embed, _ in await asyncio.gather(*tasks)]
     if omitted:
         embeds.append(omitted)
     return embeds, len(embeds)
@@ -90,7 +204,7 @@ async def handle_xkcd_mentions(message: discord.Message) -> None:
         return
     try:
         sent_message = await message.reply(
-            embeds=embeds, mention_author=False, view=DeleteButton(message, count)
+            embeds=embeds, mention_author=False, view=XKCDMentionActions(message, count)
         )
     except discord.HTTPException:
         return
@@ -104,7 +218,7 @@ xkcd_mention_edit_hook = create_edit_hook(
     linker=xkcd_mention_linker,
     message_processor=xkcd_mention_message,
     interactor=handle_xkcd_mentions,
-    view_type=DeleteButton,
+    view_type=XKCDMentionActions,
     view_timeout=SECONDS_IN_HOUR,
     embed_mode=True,
 )
