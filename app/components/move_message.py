@@ -150,6 +150,10 @@ class MessageEditBox(discord.ui.Modal, title="Edit Message"):
     )
 
     def __init__(self, message: discord.WebhookMessage) -> None:
+        # TODO(Kat): allow removing attachments or embeds.
+        #   - https://discordpy.readthedocs.io/en/stable/api.html#discord.WebhookMessage.remove_attachments
+        #   - discord.WebhookMessage.edit() lets you do this too.
+        # TODO(Kat): discord.WebhookMessage.add_files().
         self.new_text.default = message.content
         super().__init__()
         self._message = message
