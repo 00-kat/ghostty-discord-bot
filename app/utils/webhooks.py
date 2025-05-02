@@ -23,6 +23,8 @@ _EMOJI_REGEX = re.compile(r"<(a?):(\w+):(\d+)>", re.ASCII)
 
 _SNOWFLAKE_REGEX = re.compile(r"<(\D{0,2})(\d+)>", re.ASCII)
 
+_MULTIPLICATION_SIGN = "×"  # noqa: RUF001
+
 # A list of image formats supported by Discord, in the form of their file
 # extension (including the leading dot).
 SUPPORTED_IMAGE_FORMATS = frozenset({".avif", ".gif", ".jpeg", ".jpg", ".png", ".webp"})
@@ -307,13 +309,14 @@ def dynamic_timestamp(dt: dt.datetime, fmt: str | None = None) -> str:
 
 
 class _SubText:
-    # WARNING: get_moved_message_author_id() makes a lot of assumptions about
-    # the structure of the subtext; be careful when editing this as
-    # invalidating the previous expected structure can break editing and
-    # deletion of messages moved before the change was merged or ALLOW THE
-    # WRONG PERSON TO EDIT OR DELETE A MOVED MESSAGE, *even if* that function
-    # is updated to match the new structure, as this subtext change won't
-    # retroactively apply to previously moved messages on Discord's servers.
+    # WARNING: get_moved_message_author_id() and extract_subtext() make a lot
+    # of assumptions about the structure of the subtext; be careful when
+    # editing this as invalidating the previous expected structure can break
+    # editing and deletion of messages moved before the change was merged or
+    # ALLOW THE WRONG PERSON TO EDIT OR DELETE A MOVED MESSAGE, *even if* that
+    # function is updated to match the new structure, as this subtext change
+    # won't retroactively apply to previously moved messages on Discord's
+    # servers.
     reactions: str
     timestamp: str
     author: str
@@ -348,10 +351,10 @@ class _SubText:
 
     def _format_reactions(self) -> None:
         formatted_reactions = [
-            f"{emoji} ×{reaction.count}"  # noqa: RUF001
+            f"{emoji} {_MULTIPLICATION_SIGN}{reaction.count}"
             if isinstance(emoji := reaction.emoji, str)
             or getattr(emoji, "is_usable", lambda: False)()
-            else f"[{emoji.name}](<{emoji.url}>) ×{reaction.count}"  # noqa: RUF001
+            else f"[{emoji.name}](<{emoji.url}>) {_MULTIPLICATION_SIGN}{reaction.count}"
             for reaction in self.msg_data.reactions
         ]
         self.reactions = "   ".join(formatted_reactions)
@@ -392,6 +395,16 @@ class _SubText:
     @staticmethod
     def _sub_join(*strs: str) -> str:
         return "\n".join(f"-# {s}" for s in strs if s)
+
+
+def extract_subtext(content: str) -> tuple[str, str]:
+    match content.splitlines():
+        case *_, reactions, info if _MULTIPLICATION_SIGN in reactions:
+            pass
+        case *_, reactions if _MULTIPLICATION_SIGN in reactions:
+            pass
+        case *_, info:
+            pass
 
 
 async def get_or_create_webhook(
