@@ -147,10 +147,17 @@ class DeleteOriginalMessage(discord.ui.View):
         )
 
 
-class ChooseEditMethod(discord.ui.View):
+class ChooseMessageAction(discord.ui.View):
     def __init__(self, message: discord.WebhookMessage) -> None:
         super().__init__()
         self._message = message
+
+    @discord.ui.button(label="Delete", emoji="🗑️")
+    async def delete_message(
+        self, interaction: discord.Interaction, _button: discord.ui.Button[Self]
+    ) -> None:
+        await self._message.delete()
+        await interaction.response.edit_message(content="Message deleted.", view=None)
 
     @discord.ui.button(label="Edit via modal", emoji="📝")
     async def send_modal(
@@ -242,7 +249,7 @@ async def turn_into_help_post(
     await interaction.response.send_modal(HelpPostTitle(message))
 
 
-@bot.tree.context_menu(name="Delete moved message")
+@bot.tree.context_menu(name="Moved message actions")
 @discord.app_commands.guild_only()
 async def delete_moved_message(
     interaction: discord.Interaction, message: discord.Message
@@ -254,47 +261,7 @@ async def delete_moved_message(
         is MovedMessageLookupFailed.NOT_FOUND
     ):
         await interaction.response.send_message(
-            "This message cannot be deleted.", ephemeral=True
-        )
-        return
-
-    if (
-        webhook_message is MovedMessageLookupFailed.NOT_MOVED
-        or (author_id := get_moved_message_author_id(webhook_message)) is None
-    ):
-        await interaction.response.send_message(
-            "This message is not a moved message.", ephemeral=True
-        )
-        return
-
-    if not (
-        interaction.user.id == author_id
-        or message.channel.permissions_for(interaction.user).manage_messages
-    ):
-        await interaction.response.send_message(
-            "You are either not the author, or do not have the required "
-            "permissions to delete messages.",
-            ephemeral=True,
-        )
-        return
-
-    await message.delete()
-    await interaction.response.send_message("Message deleted.", ephemeral=True)
-
-
-@bot.tree.context_menu(name="Edit moved message")
-@discord.app_commands.guild_only()
-async def edit_moved_message(
-    interaction: discord.Interaction, message: discord.Message
-) -> None:
-    assert not is_dm(interaction.user)
-
-    if message.created_at < MOVED_MESSAGE_MODIFICATION_CUTOFF or (
-        (webhook_message := await get_moved_message(message))
-        is MovedMessageLookupFailed.NOT_FOUND
-    ):
-        await interaction.response.send_message(
-            "This message cannot be edited.", ephemeral=True
+            "This message cannot be modified.", ephemeral=True
         )
         return
 
@@ -309,12 +276,14 @@ async def edit_moved_message(
 
     if interaction.user.id != author_id:
         await interaction.response.send_message(
-            "Only the author of a message can edit it.", ephemeral=True
+            "You are either not the author, or do not have the required "
+            "permissions to manage messages.",
+            ephemeral=True,
         )
         return
 
     await interaction.response.send_message(
-        "How would you like to edit your message?",
-        view=ChooseEditMethod(webhook_message),
+        "What would you like to do?",
+        view=ChooseMessageAction(webhook_message),
         ephemeral=True,
     )
