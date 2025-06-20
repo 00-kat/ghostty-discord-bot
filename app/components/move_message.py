@@ -147,6 +147,19 @@ class DeleteOriginalMessage(discord.ui.View):
         )
 
 
+class ChooseEditMethod(discord.ui.View):
+    def __init__(self, message: discord.WebhookMessage) -> None:
+        super().__init__()
+        self._message = message
+
+    @discord.ui.button(label="Edit via modal", emoji="📝")
+    async def send_modal(
+        self, interaction: discord.Interaction, _button: discord.ui.Button[Self]
+    ) -> None:
+        await interaction.response.send_modal(EditMessage(self._message))
+        await interaction.delete_original_response()
+
+
 class EditMessage(discord.ui.Modal, title="Edit Message"):
     new_text: discord.ui.TextInput[Self] = discord.ui.TextInput(
         label="New message content",
@@ -300,4 +313,8 @@ async def edit_moved_message(
         )
         return
 
-    await interaction.response.send_modal(EditMessage(webhook_message))
+    await interaction.response.send_message(
+        "How would you like to edit your message?",
+        view=ChooseEditMethod(webhook_message),
+        ephemeral=True,
+    )
