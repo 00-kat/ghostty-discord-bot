@@ -68,6 +68,10 @@ EDIT_IN_THREAD_HINT = (
 )
 
 
+# A dictionary mapping threads to the message to edit and the subtext.
+edit_threads: dict[int, tuple[discord.WebhookMessage, str]] = {}
+
+
 class SelectChannel(discord.ui.View):
     def __init__(self, message: discord.Message, executor: discord.Member) -> None:
         super().__init__()
@@ -306,6 +310,7 @@ class ChooseMessageAction(discord.ui.View):
             await thread.send(EDIT_IN_THREAD_HINT)
         else:
             await thread.send(NO_CONTENT_TO_EDIT.format(interaction.user.mention))
+        edit_threads[thread.id] = (self._message, split_subtext.format())
 
     async def show_help(self, interaction: discord.Interaction) -> None:
         self.help_button.disabled = True
