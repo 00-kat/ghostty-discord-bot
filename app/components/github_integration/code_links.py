@@ -7,7 +7,7 @@ from pathlib import Path
 from textwrap import dedent
 from typing import NamedTuple
 
-import discord
+import discord as dc
 from zig_codeblocks import highlight_zig_code
 
 from app.components.zig_codeblocks import THEME
@@ -123,9 +123,7 @@ def _format_snippet(snippet: Snippet, *, include_body: bool = True) -> str:
     ) + (f"\n```{snippet.lang}\n{snippet.body}\n```" * include_body)
 
 
-async def snippet_message(
-    message: discord.Message,
-) -> tuple[tuple[str, list[discord.File]], int]:
+async def snippet_message(message: dc.Message) -> tuple[tuple[str, list[dc.File]], int]:
     snippets = [s async for s in get_snippets(message.content)]
     if not snippets:
         return ("", []), 0
@@ -136,7 +134,7 @@ async def snippet_message(
         # When there is only a single blob which goes over the limit, upload it as
         # a file instead.
         fp = BytesIO(snippets[0].body.encode())
-        file = discord.File(fp, filename=Path(snippets[0].path).name)
+        file = dc.File(fp, filename=Path(snippets[0].path).name)
         return (_format_snippet(snippets[0], include_body=False), [file]), 1
 
     if len("\n\n".join(blobs)) > 2000:
@@ -148,7 +146,7 @@ async def snippet_message(
     return ("\n".join(blobs), []), len(snippets)
 
 
-async def reply_with_code(message: discord.Message) -> None:
+async def reply_with_code(message: dc.Message) -> None:
     if message.author.bot:
         return
     (msg_content, files), snippet_count = await snippet_message(message)
@@ -162,7 +160,7 @@ async def reply_with_code(message: discord.Message) -> None:
         files=files,
         suppress_embeds=True,
         mention_author=False,
-        allowed_mentions=discord.AllowedMentions.none(),
+        allowed_mentions=dc.AllowedMentions.none(),
         view=DeleteCodeLink(message, snippet_count),
     )
     code_linker.link(message, sent_message)

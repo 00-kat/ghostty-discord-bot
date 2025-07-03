@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-import discord
+import discord as dc
 
 from .fetching import get_comments
 from app.components.github_integration.mentions.fmt import get_entity_emoji
@@ -40,7 +40,7 @@ class DeleteMention(DeleteMessage):
     action_plural = "linked these comments"
 
 
-def comment_to_embed(comment: Comment) -> discord.Embed:
+def comment_to_embed(comment: Comment) -> dc.Embed:
     title = (
         f"{emoji} {comment.entity.title}"
         if (emoji := get_entity_emoji(comment.entity))
@@ -52,7 +52,7 @@ def comment_to_embed(comment: Comment) -> discord.Embed:
         if count
     ]
     embed = (
-        discord.Embed(
+        dc.Embed(
             description=comment.body,
             title=title,
             url=comment.html_url,
@@ -73,7 +73,7 @@ def comment_to_embed(comment: Comment) -> discord.Embed:
     return embed
 
 
-async def reply_with_comments(message: discord.Message) -> None:
+async def reply_with_comments(message: dc.Message) -> None:
     if message.author.bot:
         return
     embeds = [
@@ -98,7 +98,7 @@ async def reply_with_comments(message: discord.Message) -> None:
     await remove_view_after_timeout(sent_message)
 
 
-async def comment_processor(msg: discord.Message) -> tuple[list[discord.Embed], int]:
+async def comment_processor(msg: dc.Message) -> tuple[list[dc.Embed], int]:
     comments = [comment_to_embed(i) async for i in get_comments(msg.content)]
     return comments, len(comments)
 

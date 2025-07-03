@@ -4,41 +4,41 @@ from collections import defaultdict
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
 
-import discord
+import discord as dc
 
 
 async def remove_view_after_timeout(
-    message: discord.Message,
+    message: dc.Message,
     timeout: float = 30.0,  # noqa: ASYNC109
 ) -> None:
     await asyncio.sleep(timeout)
-    with suppress(discord.NotFound, discord.HTTPException):
+    with suppress(dc.NotFound, dc.HTTPException):
         await message.edit(view=None)
 
 
 class MessageLinker:
     def __init__(self) -> None:
-        self._refs = defaultdict[discord.Message, list[discord.Message]](list)
+        self._refs = defaultdict[dc.Message, list[dc.Message]](list)
 
-    def get(self, original: discord.Message) -> list[discord.Message]:
+    def get(self, original: dc.Message) -> list[dc.Message]:
         return self._refs[original]
 
-    def link(self, original: discord.Message, *replies: discord.Message) -> None:
+    def link(self, original: dc.Message, *replies: dc.Message) -> None:
         self._refs[original].extend(replies)
 
-    def unlink(self, original: discord.Message) -> None:
+    def unlink(self, original: dc.Message) -> None:
         del self._refs[original]
 
-    def get_original_message(self, reply: discord.Message) -> discord.Message | None:
+    def get_original_message(self, reply: dc.Message) -> dc.Message | None:
         return next(
             (msg for msg, replies in self._refs.items() if reply in replies), None
         )
 
-    def unlink_from_reply(self, reply: discord.Message) -> None:
+    def unlink_from_reply(self, reply: dc.Message) -> None:
         if (original_message := self.get_original_message(reply)) is not None:
             self.unlink(original_message)
 
-    def unlink_if_expired(self, reply: discord.Message) -> bool:
+    def unlink_if_expired(self, reply: dc.Message) -> bool:
         # Stop reacting to message updates after 24 hours
         last_updated = reply.edited_at or reply.created_at
         if dt.datetime.now(tz=dt.UTC) - last_updated > dt.timedelta(hours=24):
@@ -51,25 +51,23 @@ def create_edit_hook(
     *,
     linker: MessageLinker,
     message_processor: Callable[
-        [discord.Message],
-        Awaitable[
-            tuple[str | tuple[str, list[discord.File]] | list[discord.Embed], int]
-        ],
+        [dc.Message],
+        Awaitable[tuple[str | tuple[str, list[dc.File]] | list[dc.Embed], int]],
     ],
-    interactor: Callable[[discord.Message], Awaitable[None]],
-    view_type: Callable[[discord.Message, int], discord.ui.View],
+    interactor: Callable[[dc.Message], Awaitable[None]],
+    view_type: Callable[[dc.Message, int], dc.ui.View],
     view_timeout: float = 30.0,
-) -> Callable[[discord.Message, discord.Message], Awaitable[None]]:
+) -> Callable[[dc.Message, dc.Message], Awaitable[None]]:
     def extract_content(
-        content: str | tuple[str, list[discord.File]] | list[discord.Embed],
-    ) -> tuple[str, list[discord.File], list[discord.Embed]]:
+        content: str | tuple[str, list[dc.File]] | list[dc.Embed],
+    ) -> tuple[str, list[dc.File], list[dc.Embed]]:
         if isinstance(content, list):
             return "", [], content
         if isinstance(content, str):
             return content, [], []
         return content[0], content[1], []
 
-    async def edit_hook(before: discord.Message, after: discord.Message) -> None:
+    async def edit_hook(before: dc.Message, after: dc.Message) -> None:
         if before.content == after.content:
             return
         old_objects = await message_processor(before)
@@ -111,7 +109,7 @@ def create_edit_hook(
             attachments=files,
             suppress=not embeds,
             view=view_type(after, count),
-            allowed_mentions=discord.AllowedMentions.none(),
+            allowed_mentions=dc.AllowedMentions.none(),
         )
         await remove_view_after_timeout(reply, view_timeout)
 
@@ -120,8 +118,8 @@ def create_edit_hook(
 
 def create_delete_hook(
     *, linker: MessageLinker
-) -> Callable[[discord.Message], Awaitable[None]]:
-    async def delete_hook(message: discord.Message) -> None:
+) -> Callable[[dc.Message], Awaitable[None]]:
+    async def delete_hook(message: dc.Message) -> None:
         if message.author.bot:
             linker.unlink_from_reply(message)
         elif replies := linker.get(message):

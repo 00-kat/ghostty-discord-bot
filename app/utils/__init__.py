@@ -4,7 +4,7 @@ import re
 from textwrap import shorten
 from typing import TYPE_CHECKING, Any, Self
 
-import discord
+import discord as dc
 
 from .cache import TTRCache
 from .hooks import (
@@ -73,23 +73,21 @@ if TYPE_CHECKING:
 _INVITE_LINK_REGEX = re.compile(r"\b(?:https?://)?(discord\.gg/[^\s]+)\b")
 _ORDERED_LIST_REGEX = re.compile(r"^(\d+)\. (.*)")
 
-type Account = discord.User | discord.Member
+type Account = dc.User | dc.Member
 
 
-class DeleteMessage(discord.ui.View):
+class DeleteMessage(dc.ui.View):
     linker: MessageLinker
     action_singular: str
     action_plural: str
 
-    def __init__(self, message: discord.Message, item_count: int) -> None:
+    def __init__(self, message: dc.Message, item_count: int) -> None:
         super().__init__()
         self.message = message
         self.item_count = item_count
 
-    @discord.ui.button(label="Delete", emoji="❌")
-    async def delete(
-        self, interaction: discord.Interaction, _: discord.ui.Button[Self]
-    ) -> None:
+    @dc.ui.button(label="Delete", emoji="❌")
+    async def delete(self, interaction: dc.Interaction, _: dc.ui.Button[Self]) -> None:
         assert not is_dm(interaction.user)
         if interaction.user.id == self.message.author.id or is_mod(interaction.user):
             assert interaction.message
@@ -105,31 +103,29 @@ class DeleteMessage(discord.ui.View):
         )
 
 
-class DeleteInstead(discord.ui.View):
-    def __init__(self, message: discord.Message) -> None:
+class DeleteInstead(dc.ui.View):
+    def __init__(self, message: dc.Message) -> None:
         super().__init__()
         self.message = message
 
-    @discord.ui.button(label="Delete instead", emoji="❌")
+    @dc.ui.button(label="Delete instead", emoji="❌")
     async def delete(
-        self,
-        interaction: discord.Interaction,
-        button: discord.ui.Button[Self],
+        self, interaction: dc.Interaction, button: dc.ui.Button[Self]
     ) -> None:
         button.disabled = True
         await self.message.delete()
         await interaction.response.edit_message(view=self)
 
 
-def is_dm(account: Account) -> TypeIs[discord.User]:
-    return not isinstance(account, discord.Member)
+def is_dm(account: Account) -> TypeIs[dc.User]:
+    return not isinstance(account, dc.Member)
 
 
-def is_mod(member: discord.Member) -> bool:
+def is_mod(member: dc.Member) -> bool:
     return member.get_role(config.MOD_ROLE_ID) is not None
 
 
-def is_helper(member: discord.Member) -> bool:
+def is_helper(member: dc.Member) -> bool:
     return member.get_role(config.HELPER_ROLE_ID) is not None
 
 
@@ -138,15 +134,15 @@ async def try_dm(account: Account, content: str, **extras: Any) -> None:
         return
     try:
         await account.send(content, **extras)
-    except discord.Forbidden:
+    except dc.Forbidden:
         print(f"Failed to DM {account} with: {shorten(content, width=50)}")
 
 
-def post_has_tag(post: discord.Thread, substring: str) -> bool:
+def post_has_tag(post: dc.Thread, substring: str) -> bool:
     return any(substring in tag.name.casefold() for tag in post.applied_tags)
 
 
-def post_is_solved(post: discord.Thread) -> bool:
+def post_is_solved(post: dc.Thread) -> bool:
     return any(
         post_has_tag(post, tag)
         for tag in ("solved", "moved to github", "duplicate", "stale")
@@ -168,10 +164,10 @@ def escape_special(content: str) -> str:
 
     Consider adding the following kwargs to `send()`-like functions too:
         suppress_embeds=True,
-        allowed_mentions=discord.AllowedMentions.none(),
+        allowed_mentions=dc.AllowedMentions.none(),
     """
-    escaped = discord.utils.escape_mentions(content)
-    escaped = discord.utils.escape_markdown(escaped)
+    escaped = dc.utils.escape_mentions(content)
+    escaped = dc.utils.escape_markdown(escaped)
     # escape_mentions() doesn't deal with anything other than username mentions.
     escaped = escaped.replace("<", r"\<").replace(">", r"\>")
     # Invite links are not embeds and are hence not suppressed by that flag.
@@ -183,7 +179,7 @@ def escape_special(content: str) -> str:
 
 
 def is_attachment_only(
-    message: discord.Message, *, preprocessed_content: str | None = None
+    message: dc.Message, *, preprocessed_content: str | None = None
 ) -> bool:
     if preprocessed_content is None:
         preprocessed_content = message.content
