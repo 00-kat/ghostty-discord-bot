@@ -2,7 +2,7 @@
 
 from unittest.mock import Mock
 
-import discord
+import discord as dsc
 import pytest
 
 from app.utils.webhooks import MovedMessage, _find_snowflake, _format_emoji
@@ -18,7 +18,7 @@ def test_format_unicode_emoji(emoji: str) -> None:
 
 @pytest.mark.parametrize("emoji", list(UNICODE_EMOJIS))
 def test_format_unicode_partialemoji(emoji: str) -> None:
-    assert _format_emoji(discord.PartialEmoji(name=emoji)) == emoji
+    assert _format_emoji(dsc.PartialEmoji(name=emoji)) == emoji
 
 
 @pytest.mark.parametrize(
@@ -37,7 +37,7 @@ def test_format_unicode_partialemoji(emoji: str) -> None:
 def test_format_partial_emoji(*, name: str, animated: bool, id_: int) -> None:
     url = f"https://cdn.discordapp.com/emojis/{id_}.{'gif' if animated else 'png'}"
     assert (
-        _format_emoji(discord.PartialEmoji(name=name, animated=animated, id=id_))
+        _format_emoji(dsc.PartialEmoji(name=name, animated=animated, id=id_))
         == f"[{name}](<{url}>)"
     )
 
@@ -47,7 +47,7 @@ def test_format_partial_emoji(*, name: str, animated: bool, id_: int) -> None:
 )
 def test_format_emoji_is_usable(*, is_usable: bool, output: str) -> None:
     fake_emoji = Mock(
-        discord.Emoji,
+        dsc.Emoji,
         is_usable=Mock(return_value=is_usable),
         __str__=Mock(return_value="<foo>"),
     )

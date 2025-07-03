@@ -1,4 +1,4 @@
-import discord
+import discord as dsc
 
 from .fmt import entity_message
 from app.utils import (
@@ -12,8 +12,8 @@ from app.utils import (
 )
 
 IGNORED_MESSAGE_TYPES = frozenset((
-    discord.MessageType.thread_created,
-    discord.MessageType.channel_name_change,
+    dsc.MessageType.thread_created,
+    dsc.MessageType.channel_name_change,
 ))
 
 mention_linker = MessageLinker()
@@ -25,7 +25,7 @@ class DeleteMention(DeleteMessage):
     action_plural = "mentioned these entities"
 
 
-async def reply_with_entities(message: discord.Message) -> None:
+async def reply_with_entities(message: dsc.Message) -> None:
     if message.author.bot or message.type in IGNORED_MESSAGE_TYPES:
         return
 
@@ -44,7 +44,7 @@ async def reply_with_entities(message: discord.Message) -> None:
         msg_content,
         suppress_embeds=True,
         mention_author=False,
-        allowed_mentions=discord.AllowedMentions.none(),
+        allowed_mentions=dsc.AllowedMentions.none(),
         view=DeleteMention(message, entity_count),
     )
     mention_linker.link(message, sent_message)

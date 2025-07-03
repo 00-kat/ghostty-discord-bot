@@ -4,7 +4,7 @@ from contextlib import suppress
 from dataclasses import dataclass
 from typing import Self, cast
 
-import discord
+import discord as dsc
 
 from app.setup import bot, config
 from app.utils import (
@@ -133,12 +133,12 @@ edit_thread_creators: dict[int, int] = {}
 
 
 async def _apply_edit_from_thread(
-    moved_message: MovedMessage, message: discord.Message, new_content: str
+    moved_message: MovedMessage, message: dsc.Message, new_content: str
 ) -> None:
     channel = moved_message.channel
     # Suppress NotFound in case the user attempts to commit an edit to a message that
     # was deleted in the meantime.
-    with suppress(discord.NotFound):
+    with suppress(dsc.NotFound):
         await moved_message.edit(
             content=new_content,
             attachments=[
@@ -152,24 +152,24 @@ async def _apply_edit_from_thread(
                 *(await channel.fetch_message(moved_message.id)).attachments,
                 *(await MessageData.scrape(message)).files,
             ],
-            allowed_mentions=discord.AllowedMentions.none(),
+            allowed_mentions=dsc.AllowedMentions.none(),
         )
 
 
 async def _remove_edit_thread(
-    thread: discord.Thread, author: Account, *, action: str
+    thread: dsc.Thread, author: Account, *, action: str
 ) -> None:
     # Suppress NotFound and KeyError to prevent an exception thrown if the user attempts
     # to remove the edit thread through multiple means (such as the cancel button and
     # sending an edited message) at the same time.
-    with suppress(discord.NotFound, KeyError):
+    with suppress(dsc.NotFound, KeyError):
         await thread.delete(reason=f"{author.name} {action} a moved message")
         del edit_threads[thread.id]
         del edit_thread_creators[author.id]
 
 
 async def _remove_edit_thread_after_timeout(
-    thread: discord.Thread, author: Account
+    thread: dsc.Thread, author: Account
 ) -> None:
     # Start off with a last update check so that recursive calls to this function don't
     # need to pass the remaining time around.
@@ -218,23 +218,21 @@ async def _remove_edit_thread_after_timeout(
     await _remove_edit_thread_after_timeout(thread, author)
 
 
-class SelectChannel(discord.ui.View):
-    def __init__(self, message: discord.Message, executor: discord.Member) -> None:
+class SelectChannel(dsc.ui.View):
+    def __init__(self, message: dsc.Message, executor: dsc.Member) -> None:
         super().__init__()
         self.message = message
         self.executor = executor
 
-    @discord.ui.select(
-        cls=discord.ui.ChannelSelect,
-        channel_types=[discord.ChannelType.text, discord.ChannelType.public_thread],
+    @dsc.ui.select(
+        cls=dsc.ui.ChannelSelect,
+        channel_types=[dsc.ChannelType.text, dsc.ChannelType.public_thread],
         placeholder="Select a channel",
         min_values=1,
         max_values=1,
     )
     async def select_channel(
-        self,
-        interaction: discord.Interaction,
-        sel: discord.ui.ChannelSelect[Self],
+        self, interaction: dsc.Interaction, sel: dsc.ui.ChannelSelect[Self]
     ) -> None:
         channel = await bot.fetch_channel(sel.values[0].id)
         assert isinstance(channel, GuildTextChannel)
@@ -250,10 +248,10 @@ class SelectChannel(discord.ui.View):
         await interaction.response.defer()
         webhook_channel, thread = (
             (channel.parent, channel)
-            if isinstance(channel, discord.Thread)
-            else (channel, discord.utils.MISSING)
+            if isinstance(channel, dsc.Thread)
+            else (channel, dsc.utils.MISSING)
         )
-        assert isinstance(webhook_channel, discord.TextChannel | discord.ForumChannel)
+        assert isinstance(webhook_channel, dsc.TextChannel | dsc.ForumChannel)
 
         webhook = await get_or_create_webhook(webhook_channel)
         await move_message_via_webhook(
@@ -261,19 +259,19 @@ class SelectChannel(discord.ui.View):
         )
         await interaction.edit_original_response(
             content=f"Moved the message to {channel.mention}.",
-            view=Ghostping(cast("discord.Member", self.message.author), channel),
+            view=Ghostping(cast("dsc.Member", self.message.author), channel),
         )
 
 
-class Ghostping(discord.ui.View):
-    def __init__(self, author: discord.Member, channel: GuildTextChannel) -> None:
+class Ghostping(dsc.ui.View):
+    def __init__(self, author: dsc.Member, channel: GuildTextChannel) -> None:
         super().__init__()
         self._author = author
         self._channel = channel
 
-    @discord.ui.button(label="Ghostping", emoji="👻")
+    @dsc.ui.button(label="Ghostping", emoji="👻")
     async def ghostping(
-        self, interaction: discord.Interaction, button: discord.ui.Button[Self]
+        self, interaction: dsc.Interaction, button: dsc.ui.Button[Self]
     ) -> None:
         button.disabled = True
         await interaction.response.edit_message(
@@ -282,31 +280,29 @@ class Ghostping(discord.ui.View):
                 f"and ghostpinged {self._author.mention}."
             ),
             view=self,
-            allowed_mentions=discord.AllowedMentions.none(),
+            allowed_mentions=dsc.AllowedMentions.none(),
         )
         await (await self._channel.send(self._author.mention)).delete()
 
 
-class HelpPostTitle(discord.ui.Modal, title="Turn into #help post"):
-    title_ = discord.ui.TextInput[Self](
-        label="#help post title", style=discord.TextStyle.short, max_length=100
+class HelpPostTitle(dsc.ui.Modal, title="Turn into #help post"):
+    title_ = dsc.ui.TextInput[Self](
+        label="#help post title", style=dsc.TextStyle.short, max_length=100
     )
 
-    def __init__(self, message: discord.Message) -> None:
+    def __init__(self, message: dsc.Message) -> None:
         super().__init__()
         self._message = message
 
-    async def on_submit(self, interaction: discord.Interaction) -> None:
-        help_channel = cast(
-            "discord.ForumChannel", bot.get_channel(config.HELP_CHANNEL_ID)
-        )
+    async def on_submit(self, interaction: dsc.Interaction) -> None:
+        help_channel = cast("dsc.ForumChannel", bot.get_channel(config.HELP_CHANNEL_ID))
         await interaction.response.defer(ephemeral=True)
 
         webhook = await get_or_create_webhook(help_channel)
         msg = await move_message_via_webhook(
             webhook,
             self._message,
-            cast("discord.Member", interaction.user),
+            cast("dsc.Member", interaction.user),
             thread_name=self.title_.value,
         )
         await (await msg.channel.send(self._message.author.mention)).delete()
@@ -317,10 +313,10 @@ class HelpPostTitle(discord.ui.Modal, title="Turn into #help post"):
         )
 
 
-class ChooseMessageAction(discord.ui.View):
-    attachment_button: discord.ui.Button[Self]
-    thread_button: discord.ui.Button[Self]
-    help_button: discord.ui.Button[Self]
+class ChooseMessageAction(dsc.ui.View):
+    attachment_button: dsc.ui.Button[Self]
+    thread_button: dsc.ui.Button[Self]
+    help_button: dsc.ui.Button[Self]
 
     def __init__(self, message: MovedMessage) -> None:
         super().__init__()
@@ -333,16 +329,16 @@ class ChooseMessageAction(discord.ui.View):
         if not self._attachment_button_added:
             self._add_attachment_button()
 
-    @discord.ui.button(label="Delete", emoji="❌")
+    @dsc.ui.button(label="Delete", emoji="❌")
     async def delete_message(
-        self, interaction: discord.Interaction, _button: discord.ui.Button[Self]
+        self, interaction: dsc.Interaction, _button: dsc.ui.Button[Self]
     ) -> None:
         await self._message.delete()
         await interaction.response.edit_message(content="Message deleted.", view=None)
 
-    @discord.ui.button(label="Edit via modal", emoji="📝")
+    @dsc.ui.button(label="Edit via modal", emoji="📝")
     async def send_modal(
-        self, interaction: discord.Interaction, _button: discord.ui.Button[Self]
+        self, interaction: dsc.Interaction, _button: dsc.ui.Button[Self]
     ) -> None:
         await interaction.response.send_modal(
             EditMessage(self._message, self._split_subtext)
@@ -364,25 +360,25 @@ class ChooseMessageAction(discord.ui.View):
                 # there is only one).
                 pass
             case 1:
-                self.attachment_button = discord.ui.Button(
+                self.attachment_button = dsc.ui.Button(
                     label="Remove attachment", emoji="🔗"
                 )
                 self.attachment_button.callback = self.remove_attachment
                 self.add_item(self.attachment_button)
             case _:
-                self.attachment_button = discord.ui.Button(
+                self.attachment_button = dsc.ui.Button(
                     label="Remove attachments", emoji="🔗"
                 )
                 self.attachment_button.callback = self.send_attachment_picker
                 self.add_item(self.attachment_button)
 
-    async def remove_attachment(self, interaction: discord.Interaction) -> None:
+    async def remove_attachment(self, interaction: dsc.Interaction) -> None:
         await self._message.edit(attachments=[])
         await interaction.response.edit_message(
             content="Attachment removed.", view=None
         )
 
-    async def send_attachment_picker(self, interaction: discord.Interaction) -> None:
+    async def send_attachment_picker(self, interaction: dsc.Interaction) -> None:
         await interaction.response.edit_message(
             content="Select attachments to delete.",
             view=DeleteAttachments(
@@ -392,13 +388,13 @@ class ChooseMessageAction(discord.ui.View):
 
     def _add_thread_button(self) -> None:
         self._channel = self._message.channel
-        if isinstance(self._channel, discord.Thread):
+        if isinstance(self._channel, dsc.Thread):
             # Threads can't have nested threads, try its parent.
             self._channel = self._channel.parent
-        if not isinstance(self._channel, discord.TextChannel):
+        if not isinstance(self._channel, dsc.TextChannel):
             # Only text channels can have threads.
             return
-        self.thread_button = discord.ui.Button(label="Edit in thread", emoji="🧵")
+        self.thread_button = dsc.ui.Button(label="Edit in thread", emoji="🧵")
         self.thread_button.callback = self.edit_in_thread
         self.add_item(self.thread_button)
         # Add the attachment button here so that it goes in between the thread and help
@@ -407,16 +403,16 @@ class ChooseMessageAction(discord.ui.View):
         self._add_attachment_button()
         # Add the help button conditionally as the help text does not make sense without
         # the thread button's presence.
-        self.help_button = discord.ui.Button(
+        self.help_button = dsc.ui.Button(
             label="Help",
             emoji="ℹ️",  # test: allow-vs16 # noqa: RUF001
         )
         self.help_button.callback = self.show_help
         self.add_item(self.help_button)
 
-    async def edit_in_thread(self, interaction: discord.Interaction) -> None:
+    async def edit_in_thread(self, interaction: dsc.Interaction) -> None:
         # Guaranteed by _add_thread_button().
-        assert isinstance(self._channel, discord.TextChannel)
+        assert isinstance(self._channel, dsc.TextChannel)
         if (
             existing_thread := edit_thread_creators.get(interaction.user.id)
         ) is not None:
@@ -435,11 +431,11 @@ class ChooseMessageAction(discord.ui.View):
                 reason=f"{interaction.user.name} wants to edit a moved message",
                 invitable=False,
             )
-        except discord.Forbidden:
+        except dsc.Forbidden:
             self.thread_button.disabled = True
             await interaction.response.edit_message(content=NO_THREAD_PERMS, view=self)
             raise  # Also log it in Sentry.
-        except discord.HTTPException as e:
+        except dsc.HTTPException as e:
             if e.code != MAXIMUM_NUMBER_OF_ACTIVE_THREADS_REACHED:
                 # None of the other errors are relevant here.
                 raise
@@ -456,8 +452,7 @@ class ChooseMessageAction(discord.ui.View):
                 f"{interaction.user.mention}, here are the contents of your message:"
             )
             await thread.send(
-                self._split_subtext.content,
-                allowed_mentions=discord.AllowedMentions.none(),
+                self._split_subtext.content, allowed_mentions=dsc.AllowedMentions.none()
             )
             await thread.send(EDIT_IN_THREAD_HINT, view=CancelEditing(thread))
         else:
@@ -471,18 +466,16 @@ class ChooseMessageAction(discord.ui.View):
         edit_thread_creators[interaction.user.id] = thread.id
         await _remove_edit_thread_after_timeout(thread, interaction.user)
 
-    async def show_help(self, interaction: discord.Interaction) -> None:
+    async def show_help(self, interaction: dsc.Interaction) -> None:
         self.help_button.disabled = True
         await interaction.response.edit_message(
             content=f"{MESSAGE_EDIT_HELP}\n\n{EDIT_METHOD_PROMPT}", view=self
         )
 
 
-class EditMessage(discord.ui.Modal, title="Edit Message"):
-    new_text = discord.ui.TextInput[Self](
-        label="New message content",
-        style=discord.TextStyle.long,
-        default=discord.utils.MISSING,
+class EditMessage(dsc.ui.Modal, title="Edit Message"):
+    new_text = dsc.ui.TextInput[Self](
+        label="New message content", style=dsc.TextStyle.long, default=dsc.utils.MISSING
     )
 
     def __init__(self, message: MovedMessage, split_subtext: SplitSubtext) -> None:
@@ -493,16 +486,16 @@ class EditMessage(discord.ui.Modal, title="Edit Message"):
         self.new_text.max_length = 2000 - len(split_subtext.subtext) - 1
         self._message = message
 
-    async def on_submit(self, interaction: discord.Interaction) -> None:
+    async def on_submit(self, interaction: dsc.Interaction) -> None:
         await self._message.edit(
             content=f"{self.new_text.value}\n{self._split_subtext.subtext}",
-            allowed_mentions=discord.AllowedMentions.none(),
+            allowed_mentions=dsc.AllowedMentions.none(),
         )
         await interaction.response.send_message("Message edited.", ephemeral=True)
 
 
-class DeleteAttachments(discord.ui.View):
-    select: discord.ui.Select[Self]
+class DeleteAttachments(dsc.ui.View):
+    select: dsc.ui.Select[Self]
 
     def __init__(
         self, message: MovedMessage, *, preprocessed_content: str | None = None
@@ -510,7 +503,7 @@ class DeleteAttachments(discord.ui.View):
         super().__init__()
         self._message = message
         self._content = preprocessed_content
-        self.select = discord.ui.Select(
+        self.select = dsc.ui.Select(
             placeholder="Select attachments", max_values=len(message.attachments)
         )
         for attachment in message.attachments:
@@ -521,7 +514,7 @@ class DeleteAttachments(discord.ui.View):
         self.select.callback = self.remove_attachments
         self.add_item(self.select)
 
-    async def remove_attachments(self, interaction: discord.Interaction) -> None:
+    async def remove_attachments(self, interaction: dsc.Interaction) -> None:
         to_remove = set(map(int, self.select.values))
         remaining = [a for a in self._message.attachments if a.id not in to_remove]
         if not remaining and is_attachment_only(
@@ -537,14 +530,14 @@ class DeleteAttachments(discord.ui.View):
         )
 
 
-class CancelEditing(discord.ui.View):
-    def __init__(self, thread: discord.Thread) -> None:
+class CancelEditing(dsc.ui.View):
+    def __init__(self, thread: dsc.Thread) -> None:
         super().__init__()
         self._thread = thread
 
-    @discord.ui.button(label="Cancel", emoji="❌")
+    @dsc.ui.button(label="Cancel", emoji="❌")
     async def cancel_editing(
-        self, interaction: discord.Interaction, _button: discord.ui.Button[Self]
+        self, interaction: dsc.Interaction, _button: dsc.ui.Button[Self]
     ) -> None:
         # For some reason, depending on how long deleting the thread takes, the user
         # still sees "Something went wrong." momentarily before the thread is deleted;
@@ -560,22 +553,22 @@ class CancelEditing(discord.ui.View):
         # would result in NotFound being thrown since the thread was just deleted above.
 
 
-class ContinueEditing(discord.ui.View):
-    def __init__(self, thread: discord.Thread) -> None:
+class ContinueEditing(dsc.ui.View):
+    def __init__(self, thread: dsc.Thread) -> None:
         super().__init__()
         self._thread = thread
 
-    @discord.ui.button(label="Continue Editing", emoji="📜")
+    @dsc.ui.button(label="Continue Editing", emoji="📜")
     async def continue_editing(
-        self, interaction: discord.Interaction, _button: discord.ui.Button[Self]
+        self, interaction: dsc.Interaction, _button: dsc.ui.Button[Self]
     ) -> None:
         edit_threads[self._thread.id].last_update = dt.datetime.now(tz=dt.UTC)
         assert interaction.message is not None
         await interaction.message.delete()
 
-    @discord.ui.button(label="Cancel Editing", emoji="❌")
+    @dsc.ui.button(label="Cancel Editing", emoji="❌")
     async def cancel_editing(
-        self, interaction: discord.Interaction, _button: discord.ui.Button[Self]
+        self, interaction: dsc.Interaction, _button: dsc.ui.Button[Self]
     ) -> None:
         # See the comments in CancelEditing.cancel_editing() for the reasoning behind
         # deferring here.
@@ -585,9 +578,9 @@ class ContinueEditing(discord.ui.View):
         )
 
 
-class SkipLargeAttachments(discord.ui.View):
+class SkipLargeAttachments(dsc.ui.View):
     def __init__(
-        self, message: discord.Message, state: ThreadState, new_content: str
+        self, message: dsc.Message, state: ThreadState, new_content: str
     ) -> None:
         super().__init__()
         self._message = message
@@ -595,9 +588,9 @@ class SkipLargeAttachments(discord.ui.View):
         self._moved_message = state.moved_message
         self._new_content = new_content
 
-    @discord.ui.button(label="Skip", emoji="⏩")
+    @dsc.ui.button(label="Skip", emoji="⏩")
     async def skip_large_attachments(
-        self, interaction: discord.Interaction, button: discord.ui.Button[Self]
+        self, interaction: dsc.Interaction, button: dsc.ui.Button[Self]
     ) -> None:
         self._state.last_update = dt.datetime.now(tz=dt.UTC)
         if is_attachment_only(self._message) and not is_attachment_only(
@@ -614,46 +607,44 @@ class SkipLargeAttachments(discord.ui.View):
         await _apply_edit_from_thread(
             self._moved_message, self._message, self._new_content
         )
-        assert isinstance(self._message.channel, discord.Thread)
+        assert isinstance(self._message.channel, dsc.Thread)
         await _remove_edit_thread(
             self._message.channel, self._message.author, action="finished editing"
         )
 
 
-class AttachmentChoice(discord.ui.View):
-    def __init__(self, message: discord.Message, state: ThreadState) -> None:
+class AttachmentChoice(dsc.ui.View):
+    def __init__(self, message: dsc.Message, state: ThreadState) -> None:
         super().__init__()
         self._message = message
         self._state = state
 
-    @discord.ui.button(label="No, keep content", emoji="📜")
+    @dsc.ui.button(label="No, keep content", emoji="📜")
     async def keep(
-        self, interaction: discord.Interaction, _button: discord.ui.Button[Self]
+        self, interaction: dsc.Interaction, _button: dsc.ui.Button[Self]
     ) -> None:
-        await self._edit(interaction, discord.utils.MISSING)
+        await self._edit(interaction, dsc.utils.MISSING)
 
-    @discord.ui.button(label="Yes, discard content", emoji="🖼️")  # test: allow-vs16
+    @dsc.ui.button(label="Yes, discard content", emoji="🖼️")  # test: allow-vs16
     async def discard(
-        self, interaction: discord.Interaction, _button: discord.ui.Button[Self]
+        self, interaction: dsc.Interaction, _button: dsc.ui.Button[Self]
     ) -> None:
         await self._edit(interaction, self._state.split_subtext.subtext)
 
-    async def _edit(self, interaction: discord.Interaction, content: str) -> None:
+    async def _edit(self, interaction: dsc.Interaction, content: str) -> None:
         self._state.last_update = dt.datetime.now(tz=dt.UTC)
         await interaction.response.edit_message(content=UPLOADING, view=None)
         await _apply_edit_from_thread(self._state.moved_message, self._message, content)
-        assert isinstance(self._message.channel, discord.Thread)
+        assert isinstance(self._message.channel, dsc.Thread)
         await _remove_edit_thread(
             self._message.channel, self._message.author, action="finished editing"
         )
 
 
 @bot.tree.context_menu(name="Move message")
-@discord.app_commands.default_permissions(manage_messages=True)
-@discord.app_commands.guild_only()
-async def move_message(
-    interaction: discord.Interaction, message: discord.Message
-) -> None:
+@dsc.app_commands.default_permissions(manage_messages=True)
+@dsc.app_commands.guild_only()
+async def move_message(interaction: dsc.Interaction, message: dsc.Message) -> None:
     """
     Adds a context menu item to a message to move it to a different channel. This is
     used as a moderation tool to make discussion on-topic.
@@ -682,10 +673,10 @@ async def move_message(
 
 
 @bot.tree.context_menu(name="Turn into #help post")
-@discord.app_commands.default_permissions(manage_messages=True)
-@discord.app_commands.guild_only()
+@dsc.app_commands.default_permissions(manage_messages=True)
+@dsc.app_commands.guild_only()
 async def turn_into_help_post(
-    interaction: discord.Interaction, message: discord.Message
+    interaction: dsc.Interaction, message: dsc.Message
 ) -> None:
     """
     An extension of the move_message function that creates a #help post and then moves
@@ -711,9 +702,9 @@ async def turn_into_help_post(
 
 
 @bot.tree.context_menu(name="Moved message actions")
-@discord.app_commands.guild_only()
+@dsc.app_commands.guild_only()
 async def delete_moved_message(
-    interaction: discord.Interaction, message: discord.Message
+    interaction: dsc.Interaction, message: dsc.Message
 ) -> None:
     assert not is_dm(interaction.user)
 
@@ -743,12 +734,12 @@ async def delete_moved_message(
     )
 
 
-async def check_for_edit_response(message: discord.Message) -> None:
+async def check_for_edit_response(message: dsc.Message) -> None:
     if not (
         # While the channel_type check covers this isinstance() check, Pyright needs
         # this isinstance() check to know that the type is definitely a Thread.
-        isinstance(message.channel, discord.Thread)
-        and message.channel.type is discord.ChannelType.private_thread
+        isinstance(message.channel, dsc.Thread)
+        and message.channel.type is dsc.ChannelType.private_thread
         and message.channel.id in edit_threads
     ):
         return

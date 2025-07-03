@@ -8,7 +8,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Self, overload
 
-import discord
+import discord as dsc
 import httpx
 
 from app.setup import bot
@@ -17,7 +17,7 @@ from app.utils.message_data import ExtensibleMessage, MessageData, get_files
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-GuildTextChannel = discord.TextChannel | discord.Thread
+GuildTextChannel = dsc.TextChannel | dsc.Thread
 
 _EMOJI_REGEX = re.compile(r"<(a?):(\w+):(\d+)>", re.ASCII)
 _REACTION_REGEX = re.compile(r"([^\s×]+) ×(\d+)", re.ASCII)  # noqa: RUF001
@@ -31,14 +31,14 @@ SUPPORTED_IMAGE_FORMATS = frozenset({".avif", ".gif", ".jpeg", ".jpg", ".png", "
 # https://discordpy.readthedocs.io/en/stable/api.html#discord.Message.system_content.
 # However, also include bot commands, despite them being system messages.
 NON_SYSTEM_MESSAGE_TYPES = frozenset({
-    discord.MessageType.default,
-    discord.MessageType.reply,
-    discord.MessageType.chat_input_command,
-    discord.MessageType.context_menu_command,
+    dsc.MessageType.default,
+    dsc.MessageType.reply,
+    dsc.MessageType.chat_input_command,
+    dsc.MessageType.context_menu_command,
 })
 
 
-def get_ghostty_guild() -> discord.Guild:
+def get_ghostty_guild() -> dsc.Guild:
     try:
         return next(g for g in bot.guilds if "ghostty" in g.name.casefold())
     except StopIteration:
@@ -46,7 +46,7 @@ def get_ghostty_guild() -> discord.Guild:
         raise ValueError(msg) from None
 
 
-async def _get_original_message(message: discord.Message) -> discord.Message | None:
+async def _get_original_message(message: dsc.Message) -> dsc.Message | None:
     """Can throw discord.errors.NotFound if the original message was deleted."""
     if (msg_ref := message.reference) is None:
         return None
@@ -55,18 +55,16 @@ async def _get_original_message(message: discord.Message) -> discord.Message | N
     if message.guild is None or msg_ref.message_id is None:
         return None
     channel = message.guild.get_channel(msg_ref.channel_id)
-    if not isinstance(channel, discord.TextChannel):
+    if not isinstance(channel, dsc.TextChannel):
         # There *is* a reference, but we can't access it.
-        return discord.utils.MISSING
+        return dsc.utils.MISSING
     return await channel.fetch_message(msg_ref.message_id)
 
 
-def _unattachable_embed(unattachable_elem: str, **kwargs: Any) -> discord.Embed:
+def _unattachable_embed(unattachable_elem: str, **kwargs: Any) -> dsc.Embed:
     """kwargs are passed to discord.Embed()."""
-    kwargs["color"] = discord.Color.brand_red()
-    return discord.Embed(**kwargs).set_footer(
-        text=f"Unable to attach {unattachable_elem}."
-    )
+    kwargs["color"] = dsc.Color.brand_red()
+    return dsc.Embed(**kwargs).set_footer(text=f"Unable to attach {unattachable_elem}.")
 
 
 def _convert_nitro_emojis(content: str, *, force: bool = False) -> str:
@@ -89,9 +87,9 @@ def _convert_nitro_emojis(content: str, *, force: bool = False) -> str:
     return _EMOJI_REGEX.sub(replace_nitro_emoji, content)
 
 
-async def _get_sticker_embed(sticker: discord.StickerItem) -> discord.Embed:
+async def _get_sticker_embed(sticker: dsc.StickerItem) -> dsc.Embed:
     description = (await sticker.fetch()).description
-    if sticker.format is discord.StickerFormatType.lottie:
+    if sticker.format is dsc.StickerFormatType.lottie:
         # Lottie images can't be used in embeds, unfortunately.
         return _unattachable_embed(
             "sticker", title=sticker.name, description=description
@@ -107,13 +105,13 @@ async def _get_sticker_embed(sticker: discord.StickerItem) -> discord.Embed:
             if not (await client.head(u)).is_success:
                 # The sticker URL is not actually available.
                 continue
-            embed = discord.Embed(title=sticker.name).set_image(url=u)
+            embed = dsc.Embed(title=sticker.name).set_image(url=u)
             footer = description
-            if sticker.format is discord.StickerFormatType.apng:
+            if sticker.format is dsc.StickerFormatType.apng:
                 footer = "Unable to animate sticker" + (
                     f" • {footer}" if footer else "."
                 )
-                embed.color = discord.Color.orange()
+                embed.color = dsc.Color.orange()
             embed.set_footer(text=footer)
             return embed
     return _unattachable_embed("sticker", title=sticker.name, description=description)
@@ -125,8 +123,8 @@ def truncate(s: str, length: int, *, suffix: str = "…") -> str:
     return s[: length - len(suffix)] + suffix
 
 
-async def _format_reply(reply: discord.Message) -> discord.Embed:
-    if reply is discord.utils.MISSING:
+async def _format_reply(reply: dsc.Message) -> dsc.Embed:
+    if reply is dsc.utils.MISSING:
         return _unattachable_embed("reply")
     description_prefix = ""
     description = reply.content
@@ -138,7 +136,7 @@ async def _format_reply(reply: discord.Message) -> discord.Embed:
         else:
             description = "> *Some forwarded content elided.*"
     return (
-        discord.Embed(description=f"{description_prefix}{truncate(description, 100)}")
+        dsc.Embed(description=f"{description_prefix}{truncate(description, 100)}")
         .set_author(
             name=f"↪️ Replying to {reply.author.display_name}",  # test: allow-vs16
             icon_url=reply.author.display_avatar,
@@ -147,7 +145,7 @@ async def _format_reply(reply: discord.Message) -> discord.Embed:
     )
 
 
-async def _format_context_menu_command(reply: discord.Message) -> discord.Embed:
+async def _format_context_menu_command(reply: dsc.Message) -> dsc.Embed:
     return (await _format_reply(reply)).set_author(
         name=f"⚡ Acting on {reply.author.display_name}'s message",
         icon_url=reply.author.display_avatar,
@@ -155,8 +153,8 @@ async def _format_context_menu_command(reply: discord.Message) -> discord.Embed:
 
 
 async def _format_forward(
-    forward: discord.MessageSnapshot,
-) -> tuple[list[discord.Embed], list[discord.File]]:
+    forward: dsc.MessageSnapshot,
+) -> tuple[list[dsc.Embed], list[dsc.File]]:
     content = _convert_nitro_emojis(forward.content)
     if len(content) > 4096:
         content = forward.content
@@ -166,7 +164,7 @@ async def _format_forward(
         *(e for e in forward.embeds if not e.url),
         *await asyncio.gather(*map(_get_sticker_embed, forward.stickers)),
     ]
-    embed = discord.Embed(description=content, timestamp=forward.created_at)
+    embed = dsc.Embed(description=content, timestamp=forward.created_at)
     embed.set_author(name="➜ Forwarded")
 
     images = [
@@ -197,9 +195,7 @@ async def _format_forward(
         embed.add_field(name="", value=f"-# {skipped}", inline=False)
 
     if (message := forward.cached_message) is not None:
-        if not isinstance(
-            message.channel, discord.DMChannel | discord.PartialMessageable
-        ):
+        if not isinstance(message.channel, dsc.DMChannel | dsc.PartialMessageable):
             embed.set_footer(text=f"#{message.channel.name}")
         embed.add_field(
             name="", value=f"-# [**Jump**](<{message.jump_url}>) 📎", inline=False
@@ -209,24 +205,22 @@ async def _format_forward(
     return embeds, files
 
 
-def _format_missing_reference(
-    message: discord.Message,
-) -> discord.Embed:
+def _format_missing_reference(message: dsc.Message) -> dsc.Embed:
     assert message.reference is not None
-    if message.reference.type is discord.MessageReferenceType.forward:
-        return discord.Embed(description="*Forwarded message was deleted.*").set_author(
+    if message.reference.type is dsc.MessageReferenceType.forward:
+        return dsc.Embed(description="*Forwarded message was deleted.*").set_author(
             name="➜ Forwarded"
         )
-    return discord.Embed(description="*Original message was deleted.*").set_author(
+    return dsc.Embed(description="*Original message was deleted.*").set_author(
         name=(
             "⚡ Message"
-            if message.type is discord.MessageType.context_menu_command
+            if message.type is dsc.MessageType.context_menu_command
             else "↪️ Reply"  # test: allow-vs16
         )
     )
 
 
-def _format_interaction(message: discord.Message) -> str:
+def _format_interaction(message: dsc.Message) -> str:
     if not message.interaction_metadata:
         return message.content
     # HACK: Message.interaction is deprecated, and discord.py disables any warning
@@ -234,7 +228,7 @@ def _format_interaction(message: discord.Message) -> str:
     # There is no other way to get the name, and Message._interaction is not marked
     # deprecated. Delectable.
     if hasattr(message, "_interaction") and (interaction := message._interaction):  # pyright: ignore [reportPrivateUsage] # noqa: SLF001
-        prefix = "/" * (message.type is not discord.MessageType.context_menu_command)
+        prefix = "/" * (message.type is not dsc.MessageType.context_menu_command)
         name = f"`{prefix}{interaction.name}`"
     else:
         name = "a command"
@@ -242,17 +236,17 @@ def _format_interaction(message: discord.Message) -> str:
     return f"-# *{user.mention} used {name}*\n{message.content}"
 
 
-async def _get_reply_embed(message: discord.Message) -> discord.Embed | None:
+async def _get_reply_embed(message: dsc.Message) -> dsc.Embed | None:
     try:
         ref = await _get_original_message(message)
-    except discord.errors.NotFound:
+    except dsc.errors.NotFound:
         return _format_missing_reference(message)
     if ref is None:
         return None
     assert message.reference is not None
-    if message.reference.type is discord.MessageReferenceType.reply:
+    if message.reference.type is dsc.MessageReferenceType.reply:
         return await _format_reply(ref)
-    if message.type is discord.MessageType.context_menu_command:
+    if message.type is dsc.MessageType.context_menu_command:
         return await _format_context_menu_command(ref)
     return None
 
@@ -262,11 +256,11 @@ def dynamic_timestamp(dt: dt.datetime, fmt: str | None = None) -> str:
     return f"<t:{int(dt.timestamp())}{fmt}>"
 
 
-def _format_emoji(emoji: str | discord.PartialEmoji | discord.Emoji) -> str:
+def _format_emoji(emoji: str | dsc.PartialEmoji | dsc.Emoji) -> str:
     if (
         isinstance(emoji, str)
-        or (isinstance(emoji, discord.PartialEmoji) and emoji.is_unicode_emoji())
-        or (isinstance(emoji, discord.Emoji) and emoji.is_usable())
+        or (isinstance(emoji, dsc.PartialEmoji) and emoji.is_unicode_emoji())
+        or (isinstance(emoji, dsc.Emoji) and emoji.is_usable())
     ):
         return str(emoji)
     return f"[{emoji.name}](<{emoji.url}>)"
@@ -285,8 +279,8 @@ class _Subtext:
     def __init__(
         self,
         msg_data: MessageData,
-        executor: discord.Member | None,
-        poll: discord.Poll | None = None,
+        executor: dsc.Member | None,
+        poll: dsc.Poll | None = None,
     ) -> None:
         self.msg_data = msg_data
         self._format_reactions()
@@ -304,7 +298,7 @@ class _Subtext:
             else ""
         )
         self.poll_error = (
-            "Unable to attach closed poll" if poll is discord.utils.MISSING else ""
+            "Unable to attach closed poll" if poll is dsc.utils.MISSING else ""
         )
 
     def _format_reactions(self) -> None:
@@ -380,7 +374,7 @@ class SplitSubtext:
             d[emoji] = int(count)
         return d
 
-    def update(self, message: discord.Message, executor: discord.Member | None) -> None:
+    def update(self, message: dsc.Message, executor: dsc.Member | None) -> None:
         if executor:
             assert isinstance(message.channel, GuildTextChannel)
             self._subtext += (
@@ -403,8 +397,8 @@ class SplitSubtext:
 
 
 async def get_or_create_webhook(
-    channel: discord.TextChannel | discord.ForumChannel, name: str = "Ghostty Moderator"
-) -> discord.Webhook:
+    channel: dsc.TextChannel | dsc.ForumChannel, name: str = "Ghostty Moderator"
+) -> dsc.Webhook:
     webhooks = await channel.webhooks()
     for webhook in webhooks:
         if webhook.name == name:
@@ -416,7 +410,7 @@ async def get_or_create_webhook(
     return await channel.create_webhook(name=name)
 
 
-def message_can_be_moved(message: discord.Message) -> bool:
+def message_can_be_moved(message: dsc.Message) -> bool:
     return message.type in NON_SYSTEM_MESSAGE_TYPES
 
 
@@ -433,9 +427,9 @@ def _find_snowflake(content: str, type_: str) -> tuple[int, int] | tuple[None, N
     return int(snowflake[2]), snowflake.span()[0]
 
 
-class MovedMessage(ExtensibleMessage, discord.WebhookMessage):
+class MovedMessage(ExtensibleMessage, dsc.WebhookMessage):
     def __init__(
-        self, message: discord.WebhookMessage, *, author: discord.Member | None = None
+        self, message: dsc.WebhookMessage, *, author: dsc.Member | None = None
     ) -> None:
         """
         If the subtext does not contain an author, ValueError is thrown. Providing
@@ -485,22 +479,22 @@ class MovedMessage(ExtensibleMessage, discord.WebhookMessage):
 
     @classmethod
     async def from_message(
-        cls, message: discord.Message, *, webhook_name: str = "Ghostty Moderator"
+        cls, message: dsc.Message, *, webhook_name: str = "Ghostty Moderator"
     ) -> Self | MovedMessageLookupFailed:
         if message.webhook_id is None or isinstance(
             message.channel,
             # These types can't even have a webhook.
-            discord.DMChannel | discord.GroupChannel | discord.PartialMessageable,
+            dsc.DMChannel | dsc.GroupChannel | dsc.PartialMessageable,
         ):
             return MovedMessageLookupFailed.NOT_MOVED
 
-        if isinstance(message.channel, discord.Thread):
+        if isinstance(message.channel, dsc.Thread):
             thread = message.channel
             if (channel := thread.parent) is None:
                 return MovedMessageLookupFailed.NOT_FOUND
         else:
             channel = message.channel
-            thread = discord.utils.MISSING
+            thread = dsc.utils.MISSING
 
         for webhook in await channel.webhooks():
             if webhook.id == message.webhook_id:
@@ -513,17 +507,17 @@ class MovedMessage(ExtensibleMessage, discord.WebhookMessage):
 
         try:
             return cls(await webhook.fetch_message(message.id, thread=thread))
-        except discord.Forbidden:
+        except dsc.Forbidden:
             return MovedMessageLookupFailed.NOT_FOUND
-        except (ValueError, discord.NotFound):
+        except (ValueError, dsc.NotFound):
             # NOTE: while it may seem like this function should be returning `NotFound`
-            # on `discord.NotFound`, that exception is thrown when the *webhook*
-            # couldn't find the associated message, rather than when the message doesn't
-            # exist. Since all moved messages are sent by the webhook, this branch
-            # symbolizes a message that isn't a moved message.
+            # on `dsc.NotFound`, that exception is thrown when the *webhook* couldn't
+            # find the associated message, rather than when the message doesn't exist.
+            # Since all moved messages are sent by the webhook, this branch symbolizes
+            # a message that isn't a moved message.
             return MovedMessageLookupFailed.NOT_MOVED
 
-    async def get_original_author(self) -> discord.Member:
+    async def get_original_author(self) -> dsc.Member:
         if self._original_author is not None:
             # Use the cached author.
             return self._original_author
@@ -539,37 +533,37 @@ class MovedMessage(ExtensibleMessage, discord.WebhookMessage):
 
 @overload
 async def move_message_via_webhook(
-    webhook: discord.Webhook,
-    message: discord.Message,
-    executor: discord.Member | None = None,
+    webhook: dsc.Webhook,
+    message: dsc.Message,
+    executor: dsc.Member | None = None,
     *,
-    thread: discord.abc.Snowflake = discord.utils.MISSING,
-    thread_name: str = discord.utils.MISSING,
+    thread: dsc.abc.Snowflake = dsc.utils.MISSING,
+    thread_name: str = dsc.utils.MISSING,
     include_move_marks: Literal[True] = True,
 ) -> MovedMessage: ...
 
 
 @overload
 async def move_message_via_webhook(
-    webhook: discord.Webhook,
-    message: discord.Message,
-    executor: discord.Member | None = None,
+    webhook: dsc.Webhook,
+    message: dsc.Message,
+    executor: dsc.Member | None = None,
     *,
-    thread: discord.abc.Snowflake = discord.utils.MISSING,
-    thread_name: str = discord.utils.MISSING,
+    thread: dsc.abc.Snowflake = dsc.utils.MISSING,
+    thread_name: str = dsc.utils.MISSING,
     include_move_marks: Literal[False] = False,
-) -> discord.WebhookMessage: ...
+) -> dsc.WebhookMessage: ...
 
 
 async def move_message_via_webhook(  # noqa: PLR0913
-    webhook: discord.Webhook,
-    message: discord.Message,
-    executor: discord.Member | None = None,
+    webhook: dsc.Webhook,
+    message: dsc.Message,
+    executor: dsc.Member | None = None,
     *,
-    thread: discord.abc.Snowflake = discord.utils.MISSING,
-    thread_name: str = discord.utils.MISSING,
+    thread: dsc.abc.Snowflake = dsc.utils.MISSING,
+    thread_name: str = dsc.utils.MISSING,
     include_move_marks: bool = True,
-) -> MovedMessage | discord.WebhookMessage:
+) -> MovedMessage | dsc.WebhookMessage:
     """
     WARNING: it is the caller's responsibility to check message_can_be_moved() and to
     display an informative warning message.
@@ -599,7 +593,7 @@ async def move_message_via_webhook(  # noqa: PLR0913
         or message.poll.expires_at is None
         or dt.datetime.now(tz=dt.UTC) >= message.poll.expires_at
     ):
-        poll = discord.utils.MISSING
+        poll = dsc.utils.MISSING
     else:
         poll = message.poll
 
@@ -637,7 +631,7 @@ async def move_message_via_webhook(  # noqa: PLR0913
         poll=poll,
         username=message.author.display_name,
         avatar_url=message.author.display_avatar.url,
-        allowed_mentions=discord.AllowedMentions.none(),
+        allowed_mentions=dsc.AllowedMentions.none(),
         files=msg_data.files,
         embeds=embeds,
         thread=thread,
@@ -650,7 +644,7 @@ async def move_message_via_webhook(  # noqa: PLR0913
     # as its author. A notable example is WebhookMessage, whose author is the webhook,
     # which is a User and not a Member. This means that we cannot assert message.author
     # to be a Member since that would fail when moving a moved message.
-    author = message.author if isinstance(message.author, discord.Member) else None
+    author = message.author if isinstance(message.author, dsc.Member) else None
     # This never throws as the subtext has the author present if including move marks
     # (see above).
     return MovedMessage(msg, author=author) if include_move_marks else msg
@@ -661,7 +655,7 @@ def format_or_file(
     *,
     template: str | None = None,
     transform: Callable[[str], str] | None = None,
-) -> tuple[str, discord.File | None]:
+) -> tuple[str, dsc.File | None]:
     if template is None:
         template = "{}"
 
@@ -670,7 +664,7 @@ def format_or_file(
         full_message = transform(full_message)
 
     if len(full_message) > 2000:
-        return template.format(""), discord.File(
+        return template.format(""), dsc.File(
             BytesIO(message.encode()), filename="content.md"
         )
     return full_message, None

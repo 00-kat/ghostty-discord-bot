@@ -3,7 +3,7 @@ from io import BytesIO
 from itertools import zip_longest
 from typing import Self
 
-import discord
+import discord as dsc
 from zig_codeblocks import (
     DEFAULT_THEME,
     extract_codeblocks,
@@ -31,7 +31,7 @@ THEME = DEFAULT_THEME.copy()
 del THEME["Comment"]
 
 codeblock_linker = MessageLinker()
-frozen_messages = set[discord.Message]()
+frozen_messages = set[dsc.Message]()
 
 
 def process_discord_markdown(source: str | bytes, *, only_code: bool = False) -> str:
@@ -53,8 +53,8 @@ def process_discord_markdown(source: str | bytes, *, only_code: bool = False) ->
     )
 
 
-class ZigCodeblockActions(discord.ui.View):
-    def __init__(self, message: discord.Message) -> None:
+class ZigCodeblockActions(dsc.ui.View):
+    def __init__(self, message: dsc.Message) -> None:
         super().__init__()
         self._message = message
         self._replaced_message_content = process_discord_markdown(message.content)
@@ -64,31 +64,25 @@ class ZigCodeblockActions(discord.ui.View):
             or len(message.attachments) > 0
         )
 
-    async def _reject_early(
-        self, interaction: discord.Interaction, message: str
-    ) -> bool:
+    async def _reject_early(self, interaction: dsc.Interaction, message: str) -> bool:
         assert not is_dm(interaction.user)
         if interaction.user.id == self._message.author.id or is_mod(interaction.user):
             return False
         await interaction.response.send_message(message, ephemeral=True)
         return True
 
-    @discord.ui.button(label="Delete", emoji="❌")
+    @dsc.ui.button(label="Delete", emoji="❌")
     async def dismiss(
-        self,
-        interaction: discord.Interaction,
-        _: discord.ui.Button[Self],
+        self, interaction: dsc.Interaction, _: dsc.ui.Button[Self]
     ) -> None:
         if await self._reject_early(interaction, "You can't dismiss this message."):
             return
         for reply in codeblock_linker.get(self._message):
             await reply.delete()
 
-    @discord.ui.button(label="Freeze", emoji="❄️")  # test: allow-vs16
+    @dsc.ui.button(label="Freeze", emoji="❄️")  # test: allow-vs16
     async def freeze(
-        self,
-        interaction: discord.Interaction,
-        button: discord.ui.Button[Self],
+        self, interaction: dsc.Interaction, button: dsc.ui.Button[Self]
     ) -> None:
         if await self._reject_early(interaction, "You can't freeze this message."):
             return
@@ -102,11 +96,9 @@ class ZigCodeblockActions(discord.ui.View):
             ephemeral=True,
         )
 
-    @discord.ui.button(label="Replace my message", emoji="🔄")
+    @dsc.ui.button(label="Replace my message", emoji="🔄")
     async def replace(
-        self,
-        interaction: discord.Interaction,
-        _: discord.ui.Button[Self],
+        self, interaction: dsc.Interaction, _: dsc.ui.Button[Self]
     ) -> None:
         if await self._reject_early(interaction, "You can't use this action."):
             return
@@ -115,10 +107,10 @@ class ZigCodeblockActions(discord.ui.View):
         channel = interaction.message.channel
         webhook_channel, thread = (
             (channel.parent, channel)
-            if isinstance(channel, discord.Thread)
-            else (channel, discord.utils.MISSING)
+            if isinstance(channel, dsc.Thread)
+            else (channel, dsc.utils.MISSING)
         )
-        assert isinstance(webhook_channel, discord.TextChannel | discord.ForumChannel)
+        assert isinstance(webhook_channel, dsc.TextChannel | dsc.ForumChannel)
 
         webhook = await get_or_create_webhook(webhook_channel)
         self._message.content = self._replaced_message_content
@@ -127,10 +119,8 @@ class ZigCodeblockActions(discord.ui.View):
         )
 
 
-async def _prepare_reply(
-    message: discord.Message,
-) -> tuple[list[str], list[discord.File]]:
-    attachments: list[discord.File] = []
+async def _prepare_reply(message: dsc.Message) -> tuple[list[str], list[dsc.File]]:
+    attachments: list[dsc.File] = []
     for att in message.attachments:
         if not att.filename.endswith(".zig") or att.size > MAX_ZIG_FILE_SIZE:
             continue
@@ -139,7 +129,7 @@ async def _prepare_reply(
             message.content = f"```zig\n{content.decode()}```\n{message.content}"
             continue
         attachments.append(
-            discord.File(
+            dsc.File(
                 BytesIO(highlight_zig_code(content, THEME).encode()),
                 att.filename + ".ansi",
             )
@@ -156,7 +146,7 @@ async def _prepare_reply(
     return [], []
 
 
-async def check_for_zig_code(message: discord.Message) -> None:
+async def check_for_zig_code(message: dsc.Message) -> None:
     if message.author.bot:
         return
     msg_contents, files = await _prepare_reply(message)
@@ -188,9 +178,7 @@ async def check_for_zig_code(message: discord.Message) -> None:
     await remove_view_after_timeout(final_msg, VIEW_TIMEOUT)
 
 
-async def zig_codeblock_edit_hook(
-    before: discord.Message, after: discord.Message
-) -> None:
+async def zig_codeblock_edit_hook(before: dsc.Message, after: dsc.Message) -> None:
     if before.content == after.content and before.attachments == after.attachments:
         return
 
@@ -221,7 +209,7 @@ async def zig_codeblock_edit_hook(
     if before in frozen_messages:
         return
 
-    saved_msg: discord.Message | None = None
+    saved_msg: dsc.Message | None = None
     for reply, new_content in zip_longest(replies, new_contents, fillvalue=None):
         if not (reply is None or new_content is None):
             if new_content is new_contents[-1] and len(replies) >= len(new_contents):
@@ -229,12 +217,12 @@ async def zig_codeblock_edit_hook(
                 files = new_files
             else:
                 view = None
-                files = discord.utils.MISSING
+                files = dsc.utils.MISSING
             await reply.edit(
                 content=new_content,
                 view=view,
                 attachments=files,
-                allowed_mentions=discord.AllowedMentions.none(),
+                allowed_mentions=dsc.AllowedMentions.none(),
             )
             if view is not None:
                 saved_msg = reply
@@ -246,13 +234,13 @@ async def zig_codeblock_edit_hook(
                 msg = await after.channel.send(
                     new_content,
                     view=ZigCodeblockActions(after),
-                    allowed_mentions=discord.AllowedMentions.none(),
+                    allowed_mentions=dsc.AllowedMentions.none(),
                 )
                 saved_msg = msg
             else:
                 # Not the last new reply
                 msg = await after.channel.send(
-                    new_content, allowed_mentions=discord.AllowedMentions.none()
+                    new_content, allowed_mentions=dsc.AllowedMentions.none()
                 )
             codeblock_linker.link(after, msg)
         else:
@@ -262,7 +250,7 @@ async def zig_codeblock_edit_hook(
         await remove_view_after_timeout(saved_msg, VIEW_TIMEOUT)
 
 
-async def zig_codeblock_delete_hook(message: discord.Message) -> None:
+async def zig_codeblock_delete_hook(message: dsc.Message) -> None:
     if message.author.bot and (
         original := codeblock_linker.get_original_message(message)
     ):

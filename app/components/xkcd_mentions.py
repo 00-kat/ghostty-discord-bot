@@ -2,7 +2,7 @@ import asyncio
 import datetime as dt
 import re
 
-import discord
+import discord as dsc
 import httpx
 from pydantic import BaseModel
 
@@ -28,7 +28,7 @@ class XKCD(BaseModel):
     alt: str
 
 
-class XKCDMentionCache(TTRCache[int, discord.Embed]):
+class XKCDMentionCache(TTRCache[int, dsc.Embed]):
     async def fetch(self, key: int) -> None:
         url = XKCD_URL.format(key)
         async with httpx.AsyncClient() as client:
@@ -39,7 +39,7 @@ class XKCDMentionCache(TTRCache[int, discord.Embed]):
                 if resp.status_code == 404
                 else f"Unable to fetch xkcd #{key}."
             )
-            self[key] = discord.Embed(color=discord.Color.red()).set_footer(text=error)
+            self[key] = dsc.Embed(color=dsc.Color.red()).set_footer(text=error)
             return
 
         xkcd = XKCD(**resp.json())
@@ -47,7 +47,7 @@ class XKCDMentionCache(TTRCache[int, discord.Embed]):
             day=xkcd.day, month=xkcd.month, year=xkcd.year, tzinfo=dt.UTC
         )
         self[key] = (
-            discord.Embed(title=xkcd.title, url=url)
+            dsc.Embed(title=xkcd.title, url=url)
             .set_image(url=xkcd.img)
             .set_footer(text=f"{xkcd.alt} • {date:%B %-d, %Y}")
         )
@@ -63,14 +63,12 @@ class DeleteButton(DeleteMessage):
     action_plural = "linked these xkcd comics"
 
 
-async def xkcd_mention_message(
-    message: discord.Message,
-) -> tuple[list[discord.Embed], int]:
+async def xkcd_mention_message(message: dsc.Message) -> tuple[list[dsc.Embed], int]:
     embeds = []
     matches = list(dict.fromkeys(m[1] for m in XKCD_REGEX.finditer(message.content)))
     omitted = None
     if len(matches) > 10:
-        omitted = discord.Embed(color=discord.Color.orange()).set_footer(
+        omitted = dsc.Embed(color=dsc.Color.orange()).set_footer(
             text=f"{len(matches) - 9} xkcd comics were omitted."
         )
         # Nine instead of ten to account for the `omitted` embed.
@@ -81,7 +79,7 @@ async def xkcd_mention_message(
     return embeds, len(embeds)
 
 
-async def handle_xkcd_mentions(message: discord.Message) -> None:
+async def handle_xkcd_mentions(message: dsc.Message) -> None:
     if message.author.bot:
         return
     embeds, count = await xkcd_mention_message(message)
@@ -91,7 +89,7 @@ async def handle_xkcd_mentions(message: discord.Message) -> None:
         sent_message = await message.reply(
             embeds=embeds, mention_author=False, view=DeleteButton(message, count)
         )
-    except discord.HTTPException:
+    except dsc.HTTPException:
         return
     xkcd_mention_linker.link(message, sent_message)
     await remove_view_after_timeout(sent_message)

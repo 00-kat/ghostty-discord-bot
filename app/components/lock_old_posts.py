@@ -2,20 +2,20 @@ from __future__ import annotations
 
 import datetime as dt
 
-import discord
+import discord as dsc
 
 from app import config
 from app.utils import aenumerate, dynamic_timestamp, post_is_solved
 
 
-async def check_for_old_posts(message: discord.Message) -> None:
+async def check_for_old_posts(message: dsc.Message) -> None:
     post = message.channel
     now = dt.datetime.now(tz=dt.UTC)
     one_minute_ago = now - dt.timedelta(minutes=1)
     one_month_ago = now - dt.timedelta(days=30)
 
     if (
-        not isinstance(post, discord.Thread)
+        not isinstance(post, dsc.Thread)
         or not post.parent
         or post.parent.id != config.HELP_CHANNEL_ID
         or post.locked
@@ -48,7 +48,7 @@ async def check_for_old_posts(message: discord.Message) -> None:
         creation_time_ago = dynamic_timestamp(
             (await post.fetch_message(post.id)).created_at, "R"
         )
-    except discord.NotFound:
+    except dsc.NotFound:
         creation_time_ago = "over a month ago"
     await message.reply(
         f"This post was created {creation_time_ago} and is likely no longer relevant. "
@@ -59,11 +59,11 @@ async def check_for_old_posts(message: discord.Message) -> None:
 
 
 async def _get_message(
-    thread: discord.Thread,
+    thread: dsc.Thread,
     n: int,
     *,
-    before: discord.abc.SnowflakeTime | None = None,
-    around: discord.abc.SnowflakeTime | None = None,
-) -> discord.Message | None:
+    before: dsc.abc.SnowflakeTime | None = None,
+    around: dsc.abc.SnowflakeTime | None = None,
+) -> dsc.Message | None:
     messages = thread.history(limit=n + 1, before=before, around=around)
     return await anext((m async for i, m in aenumerate(messages) if i == n), None)

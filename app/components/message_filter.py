@@ -2,7 +2,7 @@ import re
 from collections.abc import Callable
 from typing import NamedTuple, cast
 
-import discord
+import discord as dsc
 
 from app.setup import config
 from app.utils import format_or_file, try_dm
@@ -20,15 +20,12 @@ COPY_TEXT_HINT = (
     "-# **Hint:** you can get your original message with formatting preserved "
     'by using the "Copy Text" action in the context menu.'
 )
-REGULAR_MESSAGE_TYPES = frozenset({
-    discord.MessageType.default,
-    discord.MessageType.reply,
-})
+REGULAR_MESSAGE_TYPES = frozenset({dsc.MessageType.default, dsc.MessageType.reply})
 
 
 class MessageFilter(NamedTuple):
     channel_id: int
-    filter: Callable[[discord.Message], object]
+    filter: Callable[[dsc.Message], object]
     template_fillers: tuple[str, str]
 
 
@@ -36,19 +33,19 @@ MESSAGE_FILTERS = (
     # Delete non-image messages in #showcase
     MessageFilter(
         config.SHOWCASE_CHANNEL_ID,
-        lambda msg: cast("discord.Message", msg).attachments,
+        lambda msg: cast("dsc.Message", msg).attachments,
         ("any attachments", "a screenshot or a video"),
     ),
     # Delete non-link messages in #media
     MessageFilter(
         config.MEDIA_CHANNEL_ID,
-        lambda msg: URL_REGEX.search(cast("discord.Message", msg).content),
+        lambda msg: URL_REGEX.search(cast("dsc.Message", msg).content),
         ("a link", "a link"),
     ),
 )
 
 
-async def check_message_filters(message: discord.Message) -> bool:
+async def check_message_filters(message: dsc.Message) -> bool:
     for msg_filter in MESSAGE_FILTERS:
         if message.channel.id != msg_filter.channel_id or msg_filter.filter(message):
             continue
@@ -60,7 +57,7 @@ async def check_message_filters(message: discord.Message) -> bool:
         if message.type not in REGULAR_MESSAGE_TYPES:
             continue
 
-        assert isinstance(message.channel, discord.TextChannel)
+        assert isinstance(message.channel, dsc.TextChannel)
 
         notification = MESSAGE_DELETION_TEMPLATE.format(
             message.channel.mention, *msg_filter.template_fillers
