@@ -1,5 +1,6 @@
 import re
 from io import BytesIO
+from typing import Self
 
 import discord
 from zig_codeblocks import (
@@ -7,10 +8,12 @@ from zig_codeblocks import (
     CodeBlock,
     extract_codeblocks,
     highlight_zig_code,
+    process_markdown,
 )
 
 from app.utils import ItemActions, MessageLinker, remove_view_after_timeout
 from app.utils.hooks import create_delete_hook, create_edit_hook
+from app.utils.webhooks import get_or_create_webhook, move_message_via_webhook
 
 MAX_CONTENT = 51_200  # 50 KiB
 MAX_ZIG_FILE_SIZE = 8_388_608  # 8 MiB
@@ -45,6 +48,36 @@ class CodeblockActions(ItemActions):
     linker = codeblock_linker
     action_singular = "sent this code block"
     action_plural = "sent these code blocks"
+
+    def __init__(self, message: discord.Message, item_count: int) -> None:
+        super().__init__(message, item_count)
+        replaced_content = apply_discord_wa(process_markdown(message.content, THEME))
+        if message.attachments or len(replaced_content) > 2000:
+            self.replace.disabled = True
+        else:
+            self._replaced_message_content = replaced_content
+
+    @discord.ui.button(label="Replace my message", emoji="🔄")
+    async def replace(
+        self, interaction: discord.Interaction, _: discord.ui.Button[Self]
+    ) -> None:
+        if await self._reject_early(interaction, "replace"):
+            return
+
+        assert interaction.message
+        channel = interaction.message.channel
+        webhook_channel, thread = (
+            (channel.parent, channel)
+            if isinstance(channel, discord.Thread)
+            else (channel, discord.utils.MISSING)
+        )
+        assert isinstance(webhook_channel, discord.TextChannel | discord.ForumChannel)
+
+        webhook = await get_or_create_webhook(webhook_channel)
+        self.message.content = self._replaced_message_content
+        await move_message_via_webhook(
+            webhook, self.message, thread=thread, include_move_marks=False
+        )
 
 
 async def codeblock_processor(
