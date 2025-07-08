@@ -10,6 +10,7 @@ from app.common.message_moving import (
     MovedMessage,
     _find_snowflake,
     _format_emoji,
+    _unattachable_embed,
     get_ghostty_guild,
     message_can_be_moved,
 )
@@ -80,6 +81,27 @@ def test_format_emoji_is_usable(is_usable: bool, output: str) -> None:
 def test_message_can_be_moved(*, type_: type[dc.MessageType], result: bool) -> None:
     fake_message = cast("dc.Message", SimpleNamespace(type=type_))
     assert message_can_be_moved(fake_message) == result
+
+
+@pytest.mark.parametrize(
+    "elem",
+    [
+        "forward",
+        "reply",
+        "sticker",
+        "message",
+        "poll",
+        "attachment",
+        "embed",
+        "element",
+        "spider",
+        "terminal emulator",
+    ],
+)
+def test_unattachable_embed(elem: str) -> None:
+    # Require the (escaped) string to be in the returned embed. repr() on a string wraps
+    # it in quotes, so remove those too.
+    assert repr(elem)[1:-1] in repr(_unattachable_embed(elem).to_dict()).casefold()
 
 
 @pytest.mark.parametrize(
