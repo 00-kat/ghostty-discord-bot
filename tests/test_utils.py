@@ -193,8 +193,8 @@ def test_is_attachment_only(
     embeds: list[int],
     result: bool,
 ) -> None:
-    # NOTE: we don't actually care about having real Discord objects here, we
-    # only care about whether they are truthy, so ints are used everywhere.
+    # NOTE: we don't actually care about having real Discord objects here, we only care
+    # about whether they are truthy, so ints are used everywhere.
     fake_message = SimpleNamespace(
         attachments=attachments,
         components=[],
