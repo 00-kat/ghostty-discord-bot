@@ -11,6 +11,7 @@ from app.utils.webhooks import (
     MovedMessage,
     _find_snowflake,
     _format_emoji,
+    _unattachable_embed,
     message_can_be_moved,
 )
 
@@ -82,6 +83,27 @@ def test_message_can_be_moved(
 ) -> None:
     fake_message = cast("discord.Message", SimpleNamespace(type=type_))
     assert message_can_be_moved(fake_message) == result
+
+
+@pytest.mark.parametrize(
+    "elem",
+    [
+        "forward",
+        "reply",
+        "sticker",
+        "message",
+        "poll",
+        "attachment",
+        "embed",
+        "element",
+        "spider",
+        "terminal emulator",
+    ],
+)
+def test_unattachable_embed(elem: str) -> None:
+    # Require the (escaped) string to be in the returned embed. repr() on a string wraps
+    # it in quotes, so remove those too.
+    assert repr(elem)[1:-1] in repr(_unattachable_embed(elem).to_dict()).casefold()
 
 
 @pytest.mark.parametrize(
