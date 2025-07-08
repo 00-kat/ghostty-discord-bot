@@ -1,11 +1,18 @@
 # pyright: reportPrivateUsage=false
 
+from types import SimpleNamespace
+from typing import cast
 from unittest.mock import Mock
 
 import discord
 import pytest
 
-from app.utils.webhooks import MovedMessage, _find_snowflake, _format_emoji
+from app.utils.webhooks import (
+    MovedMessage,
+    _find_snowflake,
+    _format_emoji,
+    message_can_be_moved,
+)
 
 # A random list of Unicode emojis that default to the emoji presentation.
 UNICODE_EMOJIS = "📨🌼🎬⌛🧆🦯🤩👤🥈🏑🌊🤲👦🛝🍏🥫🐙👰🇫🤏🚋🏽🐾🌄🔛🐸🤣🐎💿👃🔘🍋🚈👘🚹"
@@ -53,6 +60,28 @@ def test_format_emoji_is_usable(is_usable: bool, output: str) -> None:
     )
     fake_emoji.configure_mock(name="foo", url="bar")
     assert _format_emoji(fake_emoji) == output
+
+
+@pytest.mark.parametrize(
+    ("type_", "result"),
+    [
+        (discord.MessageType.default, True),
+        (discord.MessageType.call, False),
+        (discord.MessageType.pins_add, False),
+        (discord.MessageType.reply, True),
+        (discord.MessageType.new_member, False),
+        (discord.MessageType.premium_guild_tier_1, False),
+        (discord.MessageType.chat_input_command, True),
+        (discord.MessageType.guild_discovery_grace_period_final_warning, False),
+        (discord.MessageType.context_menu_command, True),
+        (discord.MessageType.auto_moderation_action, False),
+    ],
+)
+def test_message_can_be_moved(
+    *, type_: type[discord.MessageType], result: bool
+) -> None:
+    fake_message = cast("discord.Message", SimpleNamespace(type=type_))
+    assert message_can_be_moved(fake_message) == result
 
 
 @pytest.mark.parametrize(
