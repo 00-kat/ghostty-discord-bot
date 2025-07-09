@@ -14,6 +14,7 @@ from app.common.message_moving import (
     _find_snowflake,
     _format_emoji,
     _unattachable_embed,
+    convert_nitro_emojis,
     format_or_file,
     get_ghostty_guild,
     message_can_be_moved,
@@ -21,6 +22,17 @@ from app.common.message_moving import (
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+
+@pytest.mark.parametrize(
+    ("content", "result"),
+    [
+        (),
+    ],
+)
+def test_convert_nitro_emojis(content: str, result: str) -> None:
+    assert convert_nitro_emojis(content) == result
+
 
 # A random list of Unicode emojis that default to the emoji presentation.
 UNICODE_EMOJIS = "📨🌼🎬⌛🧆🦯🤩👤🥈🏑🌊🤲👦🛝🍏🥫🐙👰🇫🤏🚋🏽🐾🌄🔛🐸🤣🐎💿👃🔘🍋🚈👘🚹"
