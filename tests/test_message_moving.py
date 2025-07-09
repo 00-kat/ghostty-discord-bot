@@ -9,9 +9,23 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from app.common.message_moving import MovedMessage, message_can_be_moved
-from app.common.message_moving.conversion import _unattachable_embed
+from app.common.message_moving.conversion import (
+    _unattachable_embed,
+    convert_nitro_emojis,
+)
 from app.common.message_moving.moved_message import _find_snowflake
 from app.common.message_moving.subtext import _format_emoji
+
+
+@pytest.mark.parametrize(
+    ("content", "result"),
+    [
+        (),
+    ],
+)
+def test_convert_nitro_emojis(content: str, result: str) -> None:
+    assert convert_nitro_emojis(content) == result
+
 
 # A random list of Unicode emojis that default to the emoji presentation.
 UNICODE_EMOJIS = "📨🌼🎬⌛🧆🦯🤩👤🥈🏑🌊🤲👦🛝🍏🥫🐙👰🇫🤏🚋🏽🐾🌄🔛🐸🤣🐎💿👃🔘🍋🚈👘🚹"
