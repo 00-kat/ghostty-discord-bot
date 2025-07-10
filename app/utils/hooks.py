@@ -91,13 +91,14 @@ def create_edit_hook(
             return
 
         if not (reply := linker.get(before)):
-            # Some processors use negative values to symbolize special error values, so
-            # this can't be `== 0`. An example of this is the snippet_message() function
-            # in the file app/components/github_integration/code_links.py.
-            if old_objects[1] <= 0 and not linker.is_frozen(before):
-                # There were no objects before, so treat this as a new message
-                await interactor(after)
-            # The message was removed from the linker at some point
+            if linker.is_frozen(before):
+                return
+            if old_objects[1] > 0:
+                # The message was removed from the linker at some point (most likely
+                # when the reply was deleted)
+                return
+            # There were no objects before, so treat this as a new message
+            await interactor(after)
             return
 
         if linker.unlink_if_expired(reply):
