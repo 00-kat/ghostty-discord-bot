@@ -83,6 +83,12 @@ def create_edit_hook(
     async def edit_hook(before: discord.Message, after: discord.Message) -> None:
         if before.content == after.content:
             return
+
+        if linker.is_expired(before):
+            # The original message wasn't updated recently enough
+            linker.unlink(before)
+            return
+
         old_objects = await message_processor(before)
         new_objects = await message_processor(after)
         if old_objects == new_objects:
