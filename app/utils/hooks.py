@@ -55,7 +55,7 @@ class MessageLinker:
             self.unlink(original_message)
 
     def is_expired(self, message: discord.Message) -> bool:
-        return (message.edited_at or message.created_at) < self.expiry_threshold
+        return message.created_at < self.expiry_threshold
 
 
 def create_edit_hook(
