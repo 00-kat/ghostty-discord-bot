@@ -108,7 +108,6 @@ class ItemActions(discord.ui.View):
             return
         assert interaction.message
         await interaction.message.delete()
-        self.linker.unlink_from_reply(interaction.message)
 
     @discord.ui.button(label="Freeze", emoji="❄️")  # test: allow-vs16
     async def freeze(
