@@ -39,7 +39,7 @@ class MessageLinker:
         self._refs[original] = reply
 
     def unlink(self, original: discord.Message) -> None:
-        del self._refs[original]
+        self._refs.pop(original, None)
 
     def get_original_message(self, reply: discord.Message) -> discord.Message | None:
         return next(
