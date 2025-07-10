@@ -20,6 +20,10 @@ class MessageLinker:
         self._refs: dict[discord.Message, discord.Message] = {}
         self._frozen = set[discord.Message]()
 
+    @property
+    def expiry_threshold(self) -> dt.datetime:
+        return dt.datetime.now(tz=dt.UTC) - dt.timedelta(hours=24)
+
     def freeze(self, message: discord.Message) -> None:
         self._frozen.add(message)
 
@@ -50,13 +54,8 @@ class MessageLinker:
         if (original_message := self.get_original_message(reply)) is not None:
             self.unlink(original_message)
 
-    def unlink_if_expired(self, reply: discord.Message) -> bool:
-        # Stop reacting to message updates after 24 hours
-        last_updated = reply.edited_at or reply.created_at
-        if dt.datetime.now(tz=dt.UTC) - last_updated > dt.timedelta(hours=24):
-            self.unlink_from_reply(reply)
-            return True
-        return False
+    def is_expired(self, message: discord.Message) -> bool:
+        return (message.edited_at or message.created_at) < self.expiry_threshold
 
 
 def create_edit_hook(
@@ -101,7 +100,10 @@ def create_edit_hook(
             await interactor(after)
             return
 
-        if linker.unlink_if_expired(reply):
+        if linker.is_expired(reply):
+            # The original message was updated recently enough, but the edits did not
+            # affect the reply, so we can assume it's expired
+            linker.unlink_from_reply(reply)
             linker.unfreeze(before)
             return
 
