@@ -13,6 +13,7 @@ from app.utils import (
     create_edit_hook,
     remove_view_after_timeout,
 )
+from app.utils.hooks import ProcessedMessage
 
 if TYPE_CHECKING:
     from app.components.github_integration.models import Comment
@@ -98,9 +99,9 @@ async def reply_with_comments(message: discord.Message) -> None:
     await remove_view_after_timeout(sent_message)
 
 
-async def comment_processor(msg: discord.Message) -> tuple[list[discord.Embed], int]:
+async def comment_processor(msg: discord.Message) -> ProcessedMessage:
     comments = [comment_to_embed(i) async for i in get_comments(msg.content)]
-    return comments, len(comments)
+    return ProcessedMessage(embeds=comments, item_count=len(comments))
 
 
 entity_comment_delete_hook = create_delete_hook(linker=comment_linker)

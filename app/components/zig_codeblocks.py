@@ -12,7 +12,7 @@ from zig_codeblocks import (
 )
 
 from app.utils import ItemActions, MessageLinker, remove_view_after_timeout
-from app.utils.hooks import create_delete_hook, create_edit_hook
+from app.utils.hooks import ProcessedMessage, create_delete_hook, create_edit_hook
 from app.utils.webhooks import get_or_create_webhook, move_message_via_webhook
 
 MAX_CONTENT = 51_200  # 50 KiB
@@ -80,9 +80,7 @@ class CodeblockActions(ItemActions):
         )
 
 
-async def codeblock_processor(
-    message: discord.Message,
-) -> tuple[tuple[str, list[discord.File]], int]:
+async def codeblock_processor(message: discord.Message) -> ProcessedMessage:
     attachments: list[discord.File] = []
     for att in message.attachments:
         if not att.filename.endswith(".zig") or att.size > MAX_ZIG_FILE_SIZE:
@@ -117,22 +115,28 @@ async def codeblock_processor(
             attachments.append(file)
         if attachments:
             code += f"\n{FILE_HIGHLIGHT_NOTE}"
-        return (code, attachments), len(highlighted_codeblocks) + len(attachments)
+        return ProcessedMessage(
+            content=code,
+            files=attachments,
+            item_count=len(highlighted_codeblocks) + len(attachments),
+        )
     if attachments:
-        return (FILE_HIGHLIGHT_NOTE, attachments), len(attachments)
-    return ("", []), 0
+        return ProcessedMessage(
+            content=FILE_HIGHLIGHT_NOTE, files=attachments, item_count=len(attachments)
+        )
+    return ProcessedMessage(item_count=0)
 
 
 async def check_for_zig_code(message: discord.Message) -> None:
     if message.author.bot:
         return
-    (content, files), item_count = await codeblock_processor(message)
-    if not item_count:
+    output = await codeblock_processor(message)
+    if not output.item_count:
         return
     reply = await message.reply(
-        content,
-        view=CodeblockActions(message, item_count),
-        files=files,
+        output.content,
+        view=CodeblockActions(message, output.item_count),
+        files=output.files,
         mention_author=False,
     )
     codeblock_linker.link(message, reply)

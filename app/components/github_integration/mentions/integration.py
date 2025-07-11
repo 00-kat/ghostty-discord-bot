@@ -36,16 +36,16 @@ async def reply_with_entities(message: discord.Message) -> None:
         )
         return
 
-    msg_content, entity_count = await entity_message(message)
-    if not entity_count:
+    output = await entity_message(message)
+    if not output.item_count:
         return
 
     sent_message = await message.reply(
-        msg_content,
+        output.content,
         suppress_embeds=True,
         mention_author=False,
         allowed_mentions=discord.AllowedMentions.none(),
-        view=MentionActions(message, entity_count),
+        view=MentionActions(message, output.item_count),
     )
     mention_linker.link(message, sent_message)
     await remove_view_after_timeout(sent_message)

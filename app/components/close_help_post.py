@@ -20,11 +20,11 @@ POST_TITLE_TOO_LONG = (
 
 
 async def mention_entity(entity_id: int) -> str:
-    msg, _ = await entity_message(
+    output = await entity_message(
         # Forging a message to use the entity mention logic
         cast("discord.Message", SimpleNamespace(content=f"#{entity_id}"))
     )
-    return msg
+    return output.content
 
 
 class Close(app_commands.Group):

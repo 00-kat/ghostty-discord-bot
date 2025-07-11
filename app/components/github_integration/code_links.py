@@ -20,6 +20,7 @@ from app.utils import (
     create_edit_hook,
     remove_view_after_timeout,
 )
+from app.utils.hooks import ProcessedMessage
 
 CODE_LINK_PATTERN = re.compile(
     r"https?://(?:www\.)?github\.com/([^/\s]+)/([^/\s]+)/blob/([^/\s]+)/([^\?#\s]+)"
@@ -123,12 +124,10 @@ def _format_snippet(snippet: Snippet, *, include_body: bool = True) -> str:
     ) + (f"\n```{snippet.lang}\n{snippet.body}\n```" * include_body)
 
 
-async def snippet_message(
-    message: discord.Message,
-) -> tuple[tuple[str, list[discord.File]], int]:
+async def snippet_message(message: discord.Message) -> ProcessedMessage:
     snippets = [s async for s in get_snippets(message.content)]
     if not snippets:
-        return ("", []), 0
+        return ProcessedMessage(item_count=0)
 
     blobs = list(map(_format_snippet, snippets))
 
@@ -137,33 +136,38 @@ async def snippet_message(
         # a file instead.
         fp = BytesIO(snippets[0].body.encode())
         file = discord.File(fp, filename=Path(snippets[0].path).name)
-        return (_format_snippet(snippets[0], include_body=False), [file]), 1
+        return ProcessedMessage(
+            content=_format_snippet(snippets[0], include_body=False),
+            files=[file],
+            item_count=1,
+        )
 
     if len("\n\n".join(blobs)) > 2000:
         while len("\n\n".join(blobs)) > 1970:  # Accounting for omission note
             blobs.pop()
         if not blobs:
-            return ("", []), -1  # Signal that all snippets were omitted
+            # Signal that all snippets were omitted
+            return ProcessedMessage(item_count=-1)
         blobs.append("-# Some snippets were omitted")
-    return ("\n".join(blobs), []), len(snippets)
+    return ProcessedMessage(content="\n".join(blobs), item_count=len(snippets))
 
 
 async def reply_with_code(message: discord.Message) -> None:
     if message.author.bot:
         return
-    (msg_content, files), snippet_count = await snippet_message(message)
-    if snippet_count != 0:
+    output = await snippet_message(message)
+    if output.item_count != 0:
         await message.edit(suppress=True)
-    if snippet_count < 1:
+    if output.item_count < 1:
         return
 
     sent_message = await message.reply(
-        msg_content,
-        files=files,
+        output.content,
+        files=output.files,
         suppress_embeds=True,
         mention_author=False,
         allowed_mentions=discord.AllowedMentions.none(),
-        view=CodeLinkActions(message, snippet_count),
+        view=CodeLinkActions(message, output.item_count),
     )
     code_linker.link(message, sent_message)
     await remove_view_after_timeout(sent_message)

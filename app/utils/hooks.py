@@ -2,8 +2,17 @@ import asyncio
 import datetime as dt
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
+from dataclasses import dataclass, field
 
 import discord
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ProcessedMessage:
+    item_count: int
+    content: str = ""
+    files: list[discord.File] = field(default_factory=list[discord.File])
+    embeds: list[discord.Embed] = field(default_factory=list[discord.Embed])
 
 
 async def remove_view_after_timeout(
@@ -61,25 +70,11 @@ class MessageLinker:
 def create_edit_hook(
     *,
     linker: MessageLinker,
-    message_processor: Callable[
-        [discord.Message],
-        Awaitable[
-            tuple[str | tuple[str, list[discord.File]] | list[discord.Embed], int]
-        ],
-    ],
+    message_processor: Callable[[discord.Message], Awaitable[ProcessedMessage]],
     interactor: Callable[[discord.Message], Awaitable[None]],
     view_type: Callable[[discord.Message, int], discord.ui.View],
     view_timeout: float = 30.0,
 ) -> Callable[[discord.Message, discord.Message], Awaitable[None]]:
-    def extract_content(
-        content: str | tuple[str, list[discord.File]] | list[discord.Embed],
-    ) -> tuple[str, list[discord.File], list[discord.Embed]]:
-        if isinstance(content, list):
-            return "", [], content
-        if isinstance(content, str):
-            return content, [], []
-        return content[0], content[1], []
-
     async def edit_hook(before: discord.Message, after: discord.Message) -> None:
         if before.content == after.content:
             return
@@ -89,16 +84,16 @@ def create_edit_hook(
             linker.unlink(before)
             return
 
-        old_objects = await message_processor(before)
-        new_objects = await message_processor(after)
-        if old_objects == new_objects:
+        old_output = await message_processor(before)
+        new_output = await message_processor(after)
+        if old_output == new_output:
             # Message changed but objects are the same
             return
 
         if not (reply := linker.get(before)):
             if linker.is_frozen(before):
                 return
-            if old_objects[1] > 0:
+            if old_output.item_count > 0:
                 # The message was removed from the linker at some point (most likely
                 # when the reply was deleted)
                 return
@@ -116,21 +111,21 @@ def create_edit_hook(
         if linker.is_frozen(before):
             return
 
-        content, count = new_objects
-        # `<= 0` for the same reason as the check above
-        if count <= 0 and not linker.is_frozen(before):
+        # Some processors use negative values to symbolize special error values, so this
+        # can't be `== 0`. An example of this is the snippet_message() function in the
+        # file app/components/github_integration/code_links.py.
+        if new_output.item_count <= 0 and not linker.is_frozen(before):
             # All objects were edited out
             linker.unlink(before)
             await reply.delete()
             return
 
-        content, files, embeds = extract_content(content)
         await reply.edit(
-            content=content,
-            embeds=embeds,
-            attachments=files,
-            suppress=not embeds,
-            view=view_type(after, count),
+            content=new_output.content,
+            embeds=new_output.embeds,
+            attachments=new_output.files,
+            suppress=not new_output.embeds,
+            view=view_type(after, new_output.item_count),
             allowed_mentions=discord.AllowedMentions.none(),
         )
         await remove_view_after_timeout(reply, view_timeout)

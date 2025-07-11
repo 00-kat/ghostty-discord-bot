@@ -9,6 +9,7 @@ from .resolution import resolve_repo_signatures
 from app.components.github_integration.models import Discussion
 from app.setup import bot, config
 from app.utils import dynamic_timestamp, escape_special, get_ghostty_guild
+from app.utils.hooks import ProcessedMessage
 
 if TYPE_CHECKING:
     import discord
@@ -114,7 +115,7 @@ def _format_mention(entity: Entity) -> str:
     return f"{emoji} {headline}\n{subtext}{entity_detail}"
 
 
-async def entity_message(message: discord.Message) -> tuple[str, int]:
+async def entity_message(message: discord.Message) -> ProcessedMessage:
     matches = list(dict.fromkeys([r async for r in resolve_repo_signatures(message)]))
 
     entities = [
@@ -130,4 +131,6 @@ async def entity_message(message: discord.Message) -> tuple[str, int]:
             entities.pop()
         entities.append("-# Some mentions were omitted")
 
-    return "\n".join(dict.fromkeys(entities)), len(entities)
+    return ProcessedMessage(
+        content="\n".join(dict.fromkeys(entities)), item_count=len(entities)
+    )
