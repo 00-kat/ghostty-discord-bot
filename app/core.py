@@ -111,20 +111,24 @@ async def on_message(message: discord.Message) -> None:
 
 @bot.event
 async def on_message_edit(before: discord.Message, after: discord.Message) -> None:
-    await entity_mention_edit_hook(before, after)
-    await entity_comment_edit_hook(before, after)
-    await code_link_edit_hook(before, after)
-    await zig_codeblock_edit_hook(before, after)
-    await xkcd_mention_edit_hook(before, after)
+    await asyncio.gather(
+        entity_mention_edit_hook(before, after),
+        entity_comment_edit_hook(before, after),
+        code_link_edit_hook(before, after),
+        zig_codeblock_edit_hook(before, after),
+        xkcd_mention_edit_hook(before, after),
+    )
 
 
 @bot.event
 async def on_message_delete(message: discord.Message) -> None:
-    await entity_mention_delete_hook(message)
-    await entity_comment_delete_hook(message)
-    await code_link_delete_hook(message)
-    await zig_codeblock_delete_hook(message)
-    await xkcd_mention_delete_hook(message)
+    await asyncio.gather(
+        entity_mention_delete_hook(message),
+        entity_comment_delete_hook(message),
+        code_link_delete_hook(message),
+        zig_codeblock_delete_hook(message),
+        xkcd_mention_delete_hook(message),
+    )
 
 
 async def sync(bot: commands.Bot, message: discord.Message) -> None:
