@@ -30,7 +30,7 @@ _COPY_TEXT_HINT = (
 _REGULAR_MESSAGE_TYPES = frozenset({dc.MessageType.default, dc.MessageType.reply})
 
 
-class _MessageFilterTuple(NamedTuple):
+class MessageFilterTuple(NamedTuple):
     channel_id: int
     filter: Callable[[dc.Message], object]
     template_fillers: tuple[str, str]
@@ -38,57 +38,61 @@ class _MessageFilterTuple(NamedTuple):
 
 @final
 class MessageFilter(commands.Cog):
-    message_filters: tuple[_MessageFilterTuple, ...]
+    message_filters: tuple[MessageFilterTuple, ...]
 
     def __init__(self, bot: GhosttyBot) -> None:
         self.bot = bot
 
         self.message_filters = (
             # Delete non-image messages in #showcase
-            _MessageFilterTuple(
+            MessageFilterTuple(
                 self.bot.config.showcase_channel_id,
                 lambda msg: cast("dc.Message", msg).attachments,
                 ("any attachments", "a screenshot or a video"),
             ),
             # Delete non-link messages in #media
-            _MessageFilterTuple(
+            MessageFilterTuple(
                 self.bot.config.media_channel_id,
                 lambda msg: _URL_REGEX.search(cast("dc.Message", msg).content),
                 ("a link", "a link"),
             ),
         )
 
-    @commands.Cog.listener("on_message")
-    async def check_message_filters(self, message: dc.Message) -> None:
-        if message.author == self.bot.user:
-            return
+    def check(self, message: dc.Message) -> MessageFilterTuple | None:
+        """
+        Returns the first message filter that did not pass, or None if all filters
+        passed.
+        """
         for msg_filter in self.message_filters:
-            if message.channel.id != msg_filter.channel_id or msg_filter.filter(
+            if message.channel.id == msg_filter.channel_id and not msg_filter.filter(
                 message
             ):
-                continue
+                return msg_filter
+        return None
 
-            await message.delete()
-
-            # Don't DM the user if it's a system message (e.g. "@user started a thread")
-            if message.type not in _REGULAR_MESSAGE_TYPES:
-                continue
-
-            assert isinstance(message.channel, dc.TextChannel)
-
-            notification = _MESSAGE_DELETION_TEMPLATE.format(
-                message.channel.mention, *msg_filter.template_fillers
-            )
-            if content_size := len(message.content):
-                notification += _MESSAGE_CONTENT_NOTICE
-            await try_dm(message.author, notification, silent=content_size > 0)
-
-            if content_size > 0:
-                content, file = format_or_file(message.content)
-                await try_dm(message.author, content, file=file)
-                await try_dm(message.author, _COPY_TEXT_HINT, silent=True)
-
+    @commands.Cog.listener("on_message")
+    async def sweep(self, message: dc.Message) -> None:
+        if message.author == self.bot.user or not (msg_filter := self.check(message)):
             return
+        assert isinstance(message.channel, dc.TextChannel)
+
+        await message.delete()
+
+        # Don't DM the user if it's a system message (e.g. "@user started a thread")
+        if message.type not in _REGULAR_MESSAGE_TYPES:
+            return
+
+        notification = _MESSAGE_DELETION_TEMPLATE.format(
+            message.channel.mention, *msg_filter.template_fillers
+        )
+        if message.content:
+            notification += _MESSAGE_CONTENT_NOTICE
+        await try_dm(message.author, notification, silent=bool(message.content))
+
+        if message.content:
+            content, file = format_or_file(message.content)
+            await try_dm(message.author, content, file=file)
+            await try_dm(message.author, _COPY_TEXT_HINT, silent=True)
 
 
 async def setup(bot: GhosttyBot) -> None:
