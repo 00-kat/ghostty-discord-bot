@@ -39,7 +39,7 @@ EmojiName = Literal[
     "pull_open",
 ]
 
-type Emojis = MappingProxyType[EmojiName, dc.Emoji]
+type Emojis = MappingProxyType[EmojiName, dc.Emoji | str]
 
 
 @final
@@ -59,8 +59,9 @@ class GhosttyBot(commands.Bot):
         self.gh = gh
         self.bot_status = BotStatus()
 
-        self._ghostty_emojis: dict[EmojiName, dc.Emoji] = {}
+        self._ghostty_emojis: dict[EmojiName, dc.Emoji | str] = {}
         self.ghostty_emojis: Emojis = MappingProxyType(self._ghostty_emojis)
+        self.emojis_loaded = asyncio.Event()
 
     @override
     async def on_error(self, event_method: str, /, *args: Any, **kwargs: Any) -> None:
@@ -220,14 +221,30 @@ class GhosttyBot(commands.Bot):
         )
 
     async def load_emojis(self) -> None:
+        self.emojis_loaded.clear()
+
         valid_emoji_names = frozenset(get_args(EmojiName))
 
-        for emoji in self.ghostty_guild.emojis:
+        for emoji in await self.fetch_application_emojis():
             if emoji.name in valid_emoji_names:
                 self._ghostty_emojis[cast("EmojiName", emoji.name)] = emoji
+                logger.debug("loaded emoji '{}'", emoji.name)
 
-        if missing_emojis := valid_emoji_names - self._ghostty_emojis.keys():
-            await self.log_channel.send(
-                "Failed to load the following emojis: " + ", ".join(missing_emojis)
-            )
-            self._ghostty_emojis |= dict.fromkeys(missing_emojis, "❓")
+        emojis_path = Path(__file__).parent.parent / "emojis"  # it's outside `app`.
+        for missing_emoji in valid_emoji_names - self._ghostty_emojis.keys():
+            logger.info("uploading missing emoji '{}'", missing_emoji)
+            try:
+                emoji = await self.create_application_emoji(
+                    name=missing_emoji,
+                    image=(emojis_path / f"{missing_emoji}.png").read_bytes(),
+                )
+            except Exception as e:  # noqa: BLE001
+                # Don't break the other missing emojis if uploading one fails.
+                logger.opt(exception=e).error(
+                    "failed to upload missing emoji '{}'", missing_emoji
+                )
+                emoji = "❓"
+            self._ghostty_emojis[missing_emoji] = emoji
+            logger.debug("loaded emoji '{}'", missing_emoji)
+
+        self.emojis_loaded.set()
