@@ -226,12 +226,34 @@ class GhosttyBot(commands.Bot):
     async def load_emojis(self) -> None:
         self.emojis_loaded.clear()
 
+        emojis_path = Path(__file__).parent.parent / "emojis"  # it's outside `app`.
+        emoji_files = {
+            emoji: (emojis_path / f"{emoji}.png").read_bytes() for emoji in _EMOJI_NAMES
+        }
+
         for emoji in await self.fetch_application_emojis():
-            if emoji.name in _EMOJI_NAMES:
-                self._ghostty_emojis[cast("EmojiName", emoji.name)] = emoji
+            if emoji.name not in _EMOJI_NAMES:
+                logger.debug("skipping emoji '{}'", emoji.name)
+                continue
+            try:
+                if await emoji.read() != emoji_files[emoji.name]:
+                    logger.info("updating out-of-date emoji '{}'", emoji.name)
+                    # Discord doesn't support changing an emoji's contents, so reupload
+                    # the new one under the same name.
+                    await emoji.delete()
+                    updated_emoji = await self.create_application_emoji(
+                        name=emoji.name, image=emoji_files[emoji.name]
+                    )
+                else:
+                    updated_emoji = emoji
+            except Exception as e:  # noqa: BLE001
+                # Don't break the other emojis if reading or reuploading a single emoji
+                # fails.
+                logger.opt(exception=e).error("failed to update emoji '{}'", emoji.name)
+            else:
+                self._ghostty_emojis[cast("EmojiName", emoji.name)] = updated_emoji
                 logger.debug("loaded emoji '{}'", emoji.name)
 
-        emojis_path = Path(__file__).parent.parent / "emojis"  # it's outside `app`.
         for emoji in self._ghostty_emojis:
             if self._ghostty_emojis[emoji] != "❓":
                 # The emoji isn't missing.
@@ -239,7 +261,7 @@ class GhosttyBot(commands.Bot):
             logger.info("uploading missing emoji '{}'", emoji)
             try:
                 self._ghostty_emojis[emoji] = await self.create_application_emoji(
-                    name=emoji, image=(emojis_path / f"{emoji}.png").read_bytes()
+                    name=emoji, image=emoji_files[emoji]
                 )
                 logger.debug("loaded emoji '{}'", emoji)
             except Exception as e:  # noqa: BLE001
