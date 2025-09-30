@@ -8,7 +8,16 @@ import pkgutil
 import sys
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Literal, cast, final, get_args, override
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Literal,
+    LiteralString,
+    cast,
+    final,
+    get_args,
+    override,
+)
 
 import discord as dc
 import sentry_sdk
@@ -40,6 +49,21 @@ EmojiName = Literal[
     "pull_open",
 ]
 
+_EMOJI_NAMES = frozenset(get_args(EmojiName))
+
+# This set contains all emojis that were previously used but are no longer used by the
+# bot. NOTE: when REMOVING or RENAMING an emoji name from the above literal, add it to
+# this set. If an emoji with this name is found in the bot's application emojis, it will
+# be removed automatically to clean up old emojis.
+_OUTDATED_EMOJI_NAMES = frozenset[LiteralString]({
+    # <- place outdated emoji names here (with a trailing comma).
+})
+
+# There must not be any overlap between the emoji names and outdated emoji names.
+assert not _EMOJI_NAMES & _OUTDATED_EMOJI_NAMES, (
+    "EmojiName args and _OUTDATED_EMOJI_NAMES overlap"
+)
+
 
 @final
 class GhosttyBot(commands.Bot):
@@ -59,7 +83,7 @@ class GhosttyBot(commands.Bot):
         self.bot_status = BotStatus()
 
         self._ghostty_emojis: dict[EmojiName, dc.Emoji | str] = dict.fromkeys(
-            get_args(EmojiName), "❓"
+            _EMOJI_NAMES, "❓"
         )
         self.ghostty_emojis = MappingProxyType(self._ghostty_emojis)
         self.emojis_loaded = asyncio.Event()
@@ -216,15 +240,17 @@ class GhosttyBot(commands.Bot):
     async def load_emojis(self) -> None:
         self.emojis_loaded.clear()
 
-        valid_emoji_names = frozenset(get_args(EmojiName))
         emojis_path = Path(__file__).parent.parent / "emojis"  # it's outside `app`.
         emoji_files = {
-            emoji: (emojis_path / f"{emoji}.png").read_bytes()
-            for emoji in valid_emoji_names
+            emoji: (emojis_path / f"{emoji}.png").read_bytes() for emoji in _EMOJI_NAMES
         }
 
         for emoji in await self.fetch_application_emojis():
-            if emoji.name not in valid_emoji_names:
+            if emoji.name in _OUTDATED_EMOJI_NAMES:
+                logger.info("removing outdated emoji '{}'", emoji.name)
+                await emoji.delete()
+                continue
+            if emoji.name not in _EMOJI_NAMES:
                 logger.debug("skipping emoji '{}'", emoji.name)
                 continue
             try:
