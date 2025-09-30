@@ -7,7 +7,16 @@ import sys
 from functools import cached_property
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Literal, cast, final, get_args, override
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Literal,
+    LiteralString,
+    cast,
+    final,
+    get_args,
+    override,
+)
 
 import discord as dc
 import sentry_sdk
@@ -40,6 +49,19 @@ EmojiName = Literal[
 ]
 
 _EMOJI_NAMES = frozenset(get_args(EmojiName))
+
+# This set contains all emojis that were previously used but are no longer used by the
+# bot. NOTE: when REMOVING or RENAMING an emoji name from the above literal, add it to
+# this set. If an emoji with this name is found in the bot's application emojis, it will
+# be removed automatically to clean up old emojis.
+_OUTDATED_EMOJI_NAMES = frozenset[LiteralString]({
+    # <- place outdated emoji names here (with a trailing comma).
+})
+
+# There must not be any overlap between the emoji names and outdated emoji names.
+assert not _EMOJI_NAMES & _OUTDATED_EMOJI_NAMES, (
+    "EmojiName args and _OUTDATED_EMOJI_NAMES overlap"
+)
 
 type Emojis = MappingProxyType[EmojiName, dc.Emoji | str]
 
@@ -232,6 +254,10 @@ class GhosttyBot(commands.Bot):
         }
 
         for emoji in await self.fetch_application_emojis():
+            if emoji.name in _OUTDATED_EMOJI_NAMES:
+                logger.info("removing outdated emoji '{}'", emoji.name)
+                await emoji.delete()
+                continue
             if emoji.name not in _EMOJI_NAMES:
                 logger.debug("skipping emoji '{}'", emoji.name)
                 continue
