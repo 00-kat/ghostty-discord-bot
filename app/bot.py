@@ -253,47 +253,62 @@ class GhosttyBot(commands.Bot):
             emoji: (emojis_path / f"{emoji}.png").read_bytes() for emoji in _EMOJI_NAMES
         }
 
-        for emoji in await self.fetch_application_emojis():
-            if emoji.name in _OUTDATED_EMOJI_NAMES:
-                logger.info("removing outdated emoji '{}'", emoji.name)
-                await emoji.delete()
-                continue
-            if emoji.name not in _EMOJI_NAMES:
-                logger.debug("skipping emoji '{}'", emoji.name)
-                continue
-            try:
-                if await emoji.read() != emoji_files[emoji.name]:
-                    logger.info("updating out-of-date emoji '{}'", emoji.name)
-                    # Discord doesn't support changing an emoji's contents, so reupload
-                    # the new one under the same name.
-                    await emoji.delete()
-                    updated_emoji = await self.create_application_emoji(
-                        name=emoji.name, image=emoji_files[emoji.name]
-                    )
-                else:
-                    updated_emoji = emoji
-            except Exception as e:  # noqa: BLE001
-                # Don't break the other emojis if reading or reuploading a single emoji
-                # fails.
-                logger.opt(exception=e).error("failed to update emoji '{}'", emoji.name)
-            else:
-                self._ghostty_emojis[cast("EmojiName", emoji.name)] = updated_emoji
-                logger.debug("loaded emoji '{}'", emoji.name)
+        async with asyncio.TaskGroup() as group:
+            for emoji in await self.fetch_application_emojis():
+                group.create_task(self._update_app_emoji(emoji_files, emoji))
 
-        for emoji in self._ghostty_emojis:
-            if self._ghostty_emojis[emoji] != "❓":
-                # The emoji isn't missing.
-                continue
-            logger.info("uploading missing emoji '{}'", emoji)
-            try:
-                self._ghostty_emojis[emoji] = await self.create_application_emoji(
-                    name=emoji, image=emoji_files[emoji]
-                )
-                logger.debug("loaded emoji '{}'", emoji)
-            except Exception as e:  # noqa: BLE001
-                # Don't break the other missing emojis if uploading one fails.
-                logger.opt(exception=e).error(
-                    "failed to upload missing emoji '{}'", emoji
-                )
+        async with asyncio.TaskGroup() as group:
+            for emoji in self._ghostty_emojis:
+                if self._ghostty_emojis[emoji] != "❓":
+                    # The emoji isn't missing.
+                    continue
+                group.create_task(self._upload_missing_app_emoji(emoji_files, emoji))
 
         self.emojis_loaded.set()
+
+    async def _update_app_emoji(
+        self, emoji_files: dict[str, bytes], emoji: dc.Emoji
+    ) -> None:
+        if emoji.name in _OUTDATED_EMOJI_NAMES:
+            logger.info("removing outdated emoji '{}'", emoji.name)
+            await emoji.delete()
+            logger.info("removed outdated emoji '{}'", emoji.name)
+            return
+        if emoji.name not in _EMOJI_NAMES:
+            logger.debug("skipping emoji '{}'", emoji.name)
+            return
+
+        try:
+            if await emoji.read() != emoji_files[emoji.name]:
+                logger.info("updating out-of-date emoji '{}'", emoji.name)
+                # Discord doesn't support changing an emoji's contents, so reupload the
+                # new one under the same name.
+                await emoji.delete()
+                logger.debug("deleted out-of-date emoji '{}'", emoji.name)
+                updated_emoji = await self.create_application_emoji(
+                    name=emoji.name, image=emoji_files[emoji.name]
+                )
+                logger.info("updated out-of-date emoji '{}'", emoji.name)
+            else:
+                updated_emoji = emoji
+        except Exception as e:  # noqa: BLE001
+            # Don't break the other emojis if reading or reuploading a single emoji
+            # fails.
+            logger.opt(exception=e).error("failed to update emoji '{}'", emoji.name)
+        else:
+            self._ghostty_emojis[cast("EmojiName", emoji.name)] = updated_emoji
+            logger.debug("loaded emoji '{}'", emoji.name)
+
+    async def _upload_missing_app_emoji(
+        self, emoji_files: dict[str, bytes], emoji: EmojiName
+    ) -> None:
+        logger.info("uploading missing emoji '{}'", emoji)
+        try:
+            self._ghostty_emojis[emoji] = await self.create_application_emoji(
+                name=emoji, image=emoji_files[emoji]
+            )
+            logger.info("uploaded missing emoji '{}'", emoji)
+            logger.debug("loaded emoji '{}'", emoji)
+        except Exception as e:  # noqa: BLE001
+            # Don't break the other missing emojis if uploading one fails.
+            logger.opt(exception=e).error("failed to upload missing emoji '{}'", emoji)
