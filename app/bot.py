@@ -70,6 +70,9 @@ emojis_var = ContextVar[MappingProxyType[EmojiName, dc.Emoji | Literal["❓"]]](
 )
 emojis = emojis_var.get
 
+# First line of every PNG file.
+_PNG_HEADER = b"\x89PNG\r\n"
+
 
 @final
 class GhosttyBot(commands.Bot):
@@ -214,9 +217,15 @@ class GhosttyBot(commands.Bot):
         self.emojis_loaded.clear()
 
         emojis_path = Path(__file__).parent.parent / "emojis"  # it's outside `app`.
-        emoji_files = {
-            emoji: (emojis_path / f"{emoji}.png").read_bytes() for emoji in _EMOJI_NAMES
-        }
+        emoji_files: dict[str, bytes] = {}
+        for emoji in _EMOJI_NAMES:
+            emoji_png = (emojis_path / f"{emoji}.png").read_bytes()
+            # Make sure the file is actually a PNG, since that's depended on by the
+            # check in _update_app_emoji().
+            if not emoji_png.startswith(_PNG_HEADER):
+                msg = f"emoji file {emoji}.png is not a png"
+                raise ValueError(msg)
+            emoji_files[emoji] = emoji_png
 
         async with asyncio.TaskGroup() as group:
             for emoji in await self.fetch_application_emojis():
@@ -246,7 +255,29 @@ class GhosttyBot(commands.Bot):
             return
 
         try:
-            if await emoji.read() != emoji_files[emoji.name]:
+            emoji_png = await emoji.read()
+            # HACK: for some reason, Discord converts all emojis uploaded to servers to
+            # WEBP, but leaves app emojis unchanged. This provides a robust method to
+            # detect out-of-date emojis; however this is very surprising, and knowing
+            # Discord this may arbitrarily change in the future (especially since this
+            # behavior is not documented). All our emojis are PNGs, so as a safety
+            # measure ensure that the downloaded emoji has a PNG header; if Discord
+            # touches emojis it will almost certainly be converted to a WEBP (whose
+            # header starts with b"RIFF&\x9a\x01\x00WEBP"), so this is probably an
+            # adequate safeguard despite being rudimentary in case Discord starts
+            # compressing emojis in the future.
+            if not emoji_png.startswith(_PNG_HEADER):
+                logger.error(
+                    "BUG: app emoji '{}' is not a png: it has probably been modified "
+                    "by discord and hence a new update check method is needed; "
+                    "assuming it is up-to-date in the interim",
+                    emoji.name,
+                )
+                # Assume it's up-to-date since the code is broken if this is reached,
+                # and re-uploading every launch is needlessly expensive since emojis
+                # don't change often.
+                updated_emoji = emoji
+            elif emoji_png != emoji_files[emoji.name]:
                 logger.info("updating out-of-date emoji '{}'", emoji.name)
                 # Discord doesn't support changing an emoji's contents, so reupload the
                 # new one under the same name.
