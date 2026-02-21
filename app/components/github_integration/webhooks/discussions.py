@@ -61,7 +61,7 @@ def register_hooks(
     bot: GhosttyBot, webhook: Monalisten, vouch_queue: VouchQueue
 ) -> None:
     @webhook.event.discussion.created
-    async def _(event: events.DiscussionCreated) -> None:
+    async def created(event: events.DiscussionCreated) -> None:
         discussion = event.discussion
         await send_embed(
             bot,
@@ -74,7 +74,7 @@ def register_hooks(
         )
 
     @webhook.event.discussion.closed
-    async def _(event: events.DiscussionClosed) -> None:
+    async def closed(event: events.DiscussionClosed) -> None:
         discussion = event.discussion
         await send_embed(
             bot,
@@ -86,7 +86,7 @@ def register_hooks(
         )
 
     @webhook.event.discussion.reopened
-    async def _(event: events.DiscussionReopened) -> None:
+    async def reopened(event: events.DiscussionReopened) -> None:
         discussion = event.discussion
         await send_embed(
             bot,
@@ -98,7 +98,7 @@ def register_hooks(
         )
 
     @webhook.event.discussion.answered
-    async def _(event: events.DiscussionAnswered) -> None:
+    async def answered(event: events.DiscussionAnswered) -> None:
         discussion = event.discussion
         if answering_user := event.answer.user:
             gh_user = GitHubUser(**answering_user.model_dump())
@@ -116,7 +116,7 @@ def register_hooks(
         )
 
     @webhook.event.discussion.unanswered
-    async def _(event: events.DiscussionUnanswered) -> None:
+    async def unanswered(event: events.DiscussionUnanswered) -> None:
         discussion = event.discussion
         await send_embed(
             bot,
@@ -128,7 +128,7 @@ def register_hooks(
         )
 
     @webhook.event.discussion.locked
-    async def _(event: events.DiscussionLocked) -> None:
+    async def locked(event: events.DiscussionLocked) -> None:
         discussion = event.discussion
         await send_embed(
             bot,
@@ -140,7 +140,7 @@ def register_hooks(
         )
 
     @webhook.event.discussion.unlocked
-    async def _(event: events.DiscussionUnlocked) -> None:
+    async def unlocked(event: events.DiscussionUnlocked) -> None:
         discussion = event.discussion
         await send_embed(
             bot,
@@ -152,7 +152,7 @@ def register_hooks(
         )
 
     @webhook.event.discussion.pinned
-    async def _(event: events.DiscussionPinned) -> None:
+    async def pinned(event: events.DiscussionPinned) -> None:
         discussion = event.discussion
         await send_embed(
             bot,
@@ -164,7 +164,7 @@ def register_hooks(
         )
 
     @webhook.event.discussion.unpinned
-    async def _(event: events.DiscussionUnpinned) -> None:
+    async def unpinned(event: events.DiscussionUnpinned) -> None:
         discussion = event.discussion
         await send_embed(
             bot,
@@ -176,7 +176,7 @@ def register_hooks(
         )
 
     @webhook.event.discussion_comment.created
-    async def _(event: events.DiscussionCommentCreated) -> None:
+    async def created(event: events.DiscussionCommentCreated) -> None:
         discussion = event.discussion
         footer = discussion_footer(discussion)
         if vouch_command := find_vouch_command(event.comment.body):
