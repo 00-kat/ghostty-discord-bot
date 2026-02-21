@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from githubkit.versions.latest.models import DiscussionPropCategory, SimpleUser
     from monalisten import Monalisten, events
 
-    from app.bot import EmojiName, GhosttyBot
+    from app.bot import EmojiName
     from app.components.github_integration.webhooks.utils import EmbedColor
     from app.components.github_integration.webhooks.vouch import VouchQueue
 
@@ -67,14 +67,11 @@ def discussion_embed_content(
     )
 
 
-def register_hooks(
-    bot: GhosttyBot, webhook: Monalisten, vouch_queue: VouchQueue
-) -> None:
+def register_hooks(webhook: Monalisten, vouch_queue: VouchQueue) -> None:
     @webhook.event.discussion.created
     async def _(event: events.DiscussionCreated) -> None:
         discussion = event.discussion
         await send_embed(
-            bot,
             event.sender,
             discussion_embed_content(discussion, "opened {}", discussion.body),
             discussion_footer(discussion, emoji="discussion"),
@@ -95,7 +92,6 @@ def register_hooks(
 
         reason = discussion.state_reason.replace("_", " ")
         await send_embed(
-            bot,
             event.sender,
             discussion_embed_content(discussion, f"closed {{}} as {reason}"),
             discussion_footer(discussion, emoji=get_discussion_emoji(discussion)),
@@ -107,7 +103,6 @@ def register_hooks(
     async def _(event: events.DiscussionReopened) -> None:
         discussion = event.discussion
         await send_embed(
-            bot,
             event.sender,
             discussion_embed_content(discussion, "reopened {}"),
             discussion_footer(discussion),
@@ -124,7 +119,6 @@ def register_hooks(
         else:
             body = None
         await send_embed(
-            bot,
             event.sender,
             discussion_embed_content(discussion, "chose an answer for {}", body),
             discussion_footer(discussion, emoji="discussion_answered"),
@@ -137,7 +131,6 @@ def register_hooks(
     async def _(event: events.DiscussionUnanswered) -> None:
         discussion = event.discussion
         await send_embed(
-            bot,
             event.sender or cast("SimpleUser", GitHubUser.default()),
             discussion_embed_content(discussion, "unmarked an answer for {}"),
             discussion_footer(discussion),
@@ -149,7 +142,6 @@ def register_hooks(
     async def _(event: events.DiscussionLocked) -> None:
         discussion = event.discussion
         await send_embed(
-            bot,
             event.sender,
             discussion_embed_content(discussion, "locked {}"),
             discussion_footer(discussion),
@@ -161,7 +153,6 @@ def register_hooks(
     async def _(event: events.DiscussionUnlocked) -> None:
         discussion = event.discussion
         await send_embed(
-            bot,
             event.sender,
             discussion_embed_content(discussion, "unlocked {}"),
             discussion_footer(discussion),
@@ -173,7 +164,6 @@ def register_hooks(
     async def _(event: events.DiscussionPinned) -> None:
         discussion = event.discussion
         await send_embed(
-            bot,
             event.sender,
             discussion_embed_content(discussion, "pinned {}"),
             discussion_footer(discussion),
@@ -185,7 +175,6 @@ def register_hooks(
     async def _(event: events.DiscussionUnpinned) -> None:
         discussion = event.discussion
         await send_embed(
-            bot,
             event.sender,
             discussion_embed_content(discussion, "unpinned {}"),
             discussion_footer(discussion),
@@ -202,7 +191,6 @@ def register_hooks(
             return
 
         await send_embed(
-            bot,
             event.sender,
             discussion_embed_content(discussion, "commented on {}", event.comment.body),
             footer,

@@ -12,10 +12,8 @@ from app.components.github_integration.webhooks.utils import (
 if TYPE_CHECKING:
     from monalisten import Monalisten, events
 
-    from app.bot import GhosttyBot
 
-
-def register_hooks(bot: GhosttyBot, monalisten_client: Monalisten) -> None:
+def register_hooks(monalisten_client: Monalisten) -> None:
     @monalisten_client.event.commit_comment
     async def _(event: events.CommitComment) -> None:
         full_sha = event.comment.commit_id
@@ -31,7 +29,6 @@ def register_hooks(bot: GhosttyBot, monalisten_client: Monalisten) -> None:
             commit_title = "(no commit message found)"
 
         await send_embed(
-            bot,
             event.sender,
             EmbedContent(
                 f"commented on commit `{sha}`",

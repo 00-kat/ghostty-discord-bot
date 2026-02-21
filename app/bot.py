@@ -5,6 +5,7 @@ import importlib.util
 import pkgutil
 import sys
 from contextlib import suppress
+from contextvars import ContextVar
 from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Literal, cast, final, get_args, override
@@ -23,6 +24,8 @@ from toolbox.errors import handle_error, interaction_error_handler
 from toolbox.messages import REGULAR_MESSAGE_TYPES
 
 if TYPE_CHECKING:
+    from contextvars import Token
+
     from toolbox.discord import Account
 
 EmojiName = Literal[
@@ -40,9 +43,12 @@ EmojiName = Literal[
     "pull_open",
 ]
 
-_EMOJI_NAMES = frozenset(get_args(EmojiName))
+_EMOJI_NAMES = frozenset[EmojiName](get_args(EmojiName))
 
-type Emojis = MappingProxyType[EmojiName, dc.Emoji | str]
+emojis_var = ContextVar[MappingProxyType[EmojiName, dc.Emoji | str]](
+    "emojis", default=MappingProxyType(dict.fromkeys(_EMOJI_NAMES, "❓"))
+)
+emojis = emojis_var.get
 
 
 @final
@@ -64,15 +70,18 @@ class GhosttyBot(commands.Bot):
         self.tree.on_error = interaction_error_handler
         self.bot_status = BotStatus()
 
-        self._ghostty_emojis: dict[EmojiName, dc.Emoji | str]
-        self._ghostty_emojis = dict.fromkeys(_EMOJI_NAMES, "❓")
-        self.ghostty_emojis: Emojis = MappingProxyType(self._ghostty_emojis)
+        self._emojis: dict[EmojiName, dc.Emoji | str]
+        self._emojis = dict.fromkeys(_EMOJI_NAMES, "❓")
+        self._emojis_token: Token[MappingProxyType[EmojiName, dc.Emoji | str]] | None
+        self._emojis_token = None
         self.emojis_loaded = asyncio.Event()
 
     def __del__(self) -> None:
         with suppress(ValueError):  # printed out if run at interpreter exit.
             config_var.reset(self._config_token)
             gh_var.reset(self._gh_token)
+            if self._emojis_token is not None:
+                emojis_var.reset(self._emojis_token)
 
     @override
     async def on_error(self, event_method: str, /, *args: Any, **kwargs: Any) -> None:
@@ -180,11 +189,12 @@ class GhosttyBot(commands.Bot):
 
         for emoji in config().ghostty_guild.emojis:
             if emoji.name in _EMOJI_NAMES:
-                self._ghostty_emojis[cast("EmojiName", emoji.name)] = emoji
+                self._emojis[cast("EmojiName", emoji.name)] = emoji
 
-        if missing_emojis := _EMOJI_NAMES - self._ghostty_emojis.keys():
+        if missing_emojis := _EMOJI_NAMES - self._emojis.keys():
             await config().log_channel.send(
                 "Failed to load the following emojis: " + ", ".join(missing_emojis)
             )
 
+        self._emojis_token = emojis_var.set(MappingProxyType(self._emojis))
         self.emojis_loaded.set()
